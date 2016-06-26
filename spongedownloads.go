@@ -7,9 +7,13 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"github.com/go-macaron/auth"
 )
 
 func main() {
+	user := requireEnv("MAVEN_USER")
+	password := requireEnv("MAVEN_PASSWORD")
+
 	ftpHost := requireEnv("FTP_HOST")
 	ftpUser := requireEnv("FTP_USER")
 	ftpPassword := requireEnv("FTP_PASSWORD")
@@ -43,6 +47,9 @@ func main() {
 		})
 
 		m.Group("/maven/upload", func() {
+
+			// Use authentication for uploading
+			m.Use(auth.Basic(user, password))
 
 			// Redirect to real Maven repository for metadata
 			m.Get("/*", func(ctx *macaron.Context) {
