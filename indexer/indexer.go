@@ -148,9 +148,9 @@ func (i *Indexer) Upload(path string, data []byte) (err error) {
 	}
 
 	if md5 {
-		err = a.SetMD5(i, data)
+		err = a.setMD5(i, data)
 	} else if sha1 {
-		err = a.SetSHA1(i, data)
+		err = a.setSHA1(i, data)
 	} else if a.uploaded {
 		err = errors.New("Artifact already uploaded")
 	} else {
@@ -235,7 +235,7 @@ func decodeHash(data []byte) string {
 	return strings.ToLower(strings.TrimSpace(string(data)))
 }
 
-func (a *artifact) SetMD5(i *Indexer, data []byte) (err error) {
+func (a *artifact) setMD5(i *Indexer, data []byte) (err error) {
 	hash := decodeHash(data)
 
 	// If artifact was already created
@@ -248,7 +248,7 @@ func (a *artifact) SetMD5(i *Indexer, data []byte) (err error) {
 	return
 }
 
-func (a *artifact) SetSHA1(i *Indexer, data []byte) (err error) {
+func (a *artifact) setSHA1(i *Indexer, data []byte) (err error) {
 	hash := decodeHash(data)
 
 	// If artifact was already created
