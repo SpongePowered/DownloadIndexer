@@ -3,11 +3,11 @@ package main
 import (
 	"github.com/Minecrell/SpongeDownloads/indexer"
 	"github.com/Minecrell/SpongeDownloads/maven"
+	"github.com/go-macaron/auth"
 	"gopkg.in/macaron.v1"
 	"log"
 	"net/http"
 	"os"
-	"github.com/go-macaron/auth"
 )
 
 func main() {
@@ -30,8 +30,23 @@ func main() {
 		target += "/"
 	}
 
+	// Database
+	databaseHost := requireEnv("POSTGRES_HOST")
+	databaseUser := requireEnv("POSTGRES_USER")
+	databasePassword := requireEnv("POSTGRES_PASSWORD")
+	database := requireEnv("POSTGRES_DATABASE")
+
 	// Initialize indexer
-	indexer := &indexer.Indexer{Target: target}
+	indexer, err := indexer.CreatePostgres(databaseHost, databaseUser, databasePassword, database, target)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	// TODO
+	err = indexer.Init(true)
+	if err != nil {
+		log.Fatalln(err)
+	}
 
 	// Initialize Maven proxy
 	proxy := &maven.Proxy{Target: target, Uploader: []maven.Uploader{indexer, ftpUploader}}
@@ -41,37 +56,33 @@ func main() {
 	m.Use(macaron.Logger())
 	m.Use(macaron.Recovery())
 
-	m.Group("/api", func() {
-		m.Group("/v1", func() {
-			// TODO
+	m.Group("/api/v1", func() {
+		// TODO
+	})
+
+	m.Group("/maven/upload", func() {
+
+		// Redirect to real Maven repository for metadata
+		m.Get("/*", func(ctx *macaron.Context) {
+			ctx.Redirect(proxy.Get(ctx.Params("*")), http.StatusMovedPermanently)
 		})
 
-		m.Group("/maven/upload", func() {
+		// Handle uploads to Maven repository
+		m.Put("/*", func(ctx *macaron.Context) (int, string) {
+			bytes, err := ctx.Req.Body().Bytes()
+			if err != nil {
+				panic(err) // TODO: Error handling
+			}
 
-			// Use authentication for uploading
-			m.Use(auth.Basic(user, password))
+			err = proxy.Upload(ctx.Params("*"), bytes)
+			if err != nil {
+				panic(err) // TODO: Error handling
+			}
 
-			// Redirect to real Maven repository for metadata
-			m.Get("/*", func(ctx *macaron.Context) {
-				ctx.Redirect(proxy.Get(ctx.Params("*")), http.StatusMovedPermanently)
-			})
+			return http.StatusOK, "OK"
+		},
+			auth.Basic(user, password)) // Use authentication for uploading
 
-			// Handle uploads to Maven repository
-			m.Put("/*", func(ctx *macaron.Context) (int, string) {
-				bytes, err := ctx.Req.Body().Bytes()
-				if err != nil {
-					panic(err) // TODO: Error handling
-				}
-
-				err = proxy.Upload(ctx.Params("*"), bytes)
-				if err != nil {
-					panic(err) // TODO: Error handling
-				}
-
-				return http.StatusOK, "OK"
-			})
-
-		})
 	})
 
 	m.Run()

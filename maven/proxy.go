@@ -1,12 +1,7 @@
 package maven
 
-import (
-	"bytes"
-	"io"
-)
-
 type Uploader interface {
-	Upload(path string, reader io.Reader) error
+	Upload(path string, data []byte) error
 }
 
 type Proxy struct {
@@ -19,16 +14,8 @@ func (p *Proxy) Get(path string) string {
 }
 
 func (p *Proxy) Upload(path string, data []byte) (err error) {
-	reader := bytes.NewReader(data)
-
 	for _, uploader := range p.Uploader {
-		err = uploader.Upload(path, reader)
-		if err != nil {
-			return
-		}
-
-		// Reset reader
-		_, err = reader.Seek(0, 0)
+		err = uploader.Upload(path, data)
 		if err != nil {
 			return
 		}
