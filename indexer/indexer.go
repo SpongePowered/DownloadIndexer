@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"database/sql"
 	"errors"
+	"github.com/Minecrell/SpongeDownloads/db"
 	"io"
 	"strings"
 	"sync"
@@ -13,7 +14,7 @@ import (
 
 type Indexer struct {
 	db     *sql.DB
-	Target string
+	target string
 
 	cache     map[version]*download
 	cacheLock sync.RWMutex
@@ -47,40 +48,12 @@ type artifact struct {
 	sha1     sql.NullString
 }
 
-func CreatePostgres(host, user, password, database string, target string) (*Indexer, error) {
-	db, err := connectPostgres(host, user, password, database)
-	if err != nil {
-		return nil, err
-	}
-
-	// Make sure target ends with a slash
-	if target[len(target)-1] != '/' {
-		target += "/"
-	}
-
-	return &Indexer{db: db, Target: target, cache: make(map[version]*download)}, nil
-}
-
-func (i *Indexer) Init(create bool) (err error) {
-	if create {
-		err = dropTables(i.db)
-		if err != nil {
-			return
-		}
-
-		err = createTables(i.db)
-		if err != nil {
-			return
-		}
-
-		err = addProjects(i.db)
-	}
-
-	return
+func Create(db *sql.DB, target string) *Indexer {
+	return &Indexer{db: db, target: target, cache: make(map[version]*download)}
 }
 
 func (i *Indexer) Redirect(path string) string {
-	return i.Target + path
+	return i.target + path
 }
 
 // TODO: Better error handling
@@ -204,6 +177,8 @@ func (d *download) create(i *Indexer, v version, mainJar []byte) (err error) {
 		return
 	}
 
+	minecraft := db.ToNullString(m["Minecraft-Version"])
+
 	var branchID uint
 	row := i.db.QueryRow("SELECT id FROM branches WHERE project_id = $1 AND name = $2;", d.projectID, branch)
 	err = row.Scan(&branchID)
@@ -220,7 +195,7 @@ func (d *download) create(i *Indexer, v version, mainJar []byte) (err error) {
 		}
 	}
 
-	row = i.db.QueryRow("INSERT INTO downloads VALUES (DEFAULT, $1, $2, NULL, $3, $4, $5) RETURNING id;", v.version, v.snapshotVersion, d.uploaded, commit, branchID)
+	row = i.db.QueryRow("INSERT INTO downloads VALUES (DEFAULT, $1, $2, $3, $4, NULL, $5, $6, $7) RETURNING id;", d.projectID, v.version, v.snapshotVersion, minecraft, d.uploaded, commit, branchID)
 	err = row.Scan(&d.id)
 	return
 }
@@ -242,7 +217,7 @@ func (a *artifact) setMD5(i *Indexer, data []byte) (err error) {
 	if a.id > 0 {
 		_, err = i.db.Exec("UPDATE artifacts SET md5 = $1 WHERE id = $2;", hash, a.id)
 	} else {
-		a.md5 = toNullString(hash)
+		a.md5 = db.ToNullString(hash)
 	}
 
 	return
@@ -255,7 +230,7 @@ func (a *artifact) setSHA1(i *Indexer, data []byte) (err error) {
 	if a.id > 0 {
 		_, err = i.db.Exec("UPDATE artifacts SET sha1 = $1 WHERE id = $2;", hash, a.id)
 	} else {
-		a.sha1 = toNullString(hash)
+		a.sha1 = db.ToNullString(hash)
 	}
 
 	return

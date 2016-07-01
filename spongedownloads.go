@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/Minecrell/SpongeDownloads/api"
+	"github.com/Minecrell/SpongeDownloads/db"
 	"github.com/Minecrell/SpongeDownloads/indexer"
 	"github.com/Minecrell/SpongeDownloads/maven"
 	"github.com/go-macaron/auth"
@@ -31,22 +33,18 @@ func main() {
 	}
 
 	// Database
-	databaseHost := requireEnv("POSTGRES_HOST")
-	databaseUser := requireEnv("POSTGRES_USER")
-	databasePassword := requireEnv("POSTGRES_PASSWORD")
-	database := requireEnv("POSTGRES_DATABASE")
-
-	// Initialize indexer
-	indexer, err := indexer.CreatePostgres(databaseHost, databaseUser, databasePassword, database, target)
+	postgresUrl := requireEnv("POSTGRES_URL")
+	postgresDb, err := db.ConnectPostgres(postgresUrl)
 	if err != nil {
 		log.Fatalln(err)
 	}
 
 	// TODO
-	err = indexer.Init(true)
-	if err != nil {
-		log.Fatalln(err)
-	}
+	//db.Reset(postgresDb)
+
+	// Initialize indexer
+	indexer := indexer.Create(postgresDb, target)
+	api := api.Create(postgresDb, target)
 
 	// Initialize Maven proxy
 	proxy := &maven.Proxy{Target: target, Uploader: []maven.Uploader{indexer, ftpUploader}}
@@ -57,7 +55,12 @@ func main() {
 	m.Use(macaron.Recovery())
 
 	m.Group("/api/v1", func() {
-		// TODO
+		m.Use(macaron.Renderer())
+
+		m.Get("/", api.GetVersion)
+		m.Get("/projects", api.GetProjects)
+		m.Get("/project/:project", api.GetProject)
+		m.Get("/project/:project/downloads", api.GetDownloads)
 	})
 
 	m.Group("/maven/upload", func() {

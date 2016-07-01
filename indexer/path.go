@@ -2,6 +2,7 @@ package indexer
 
 import (
 	"errors"
+	"github.com/Minecrell/SpongeDownloads/db"
 	"strings"
 )
 
@@ -44,7 +45,7 @@ func parsePath(path string) (v version, a artifactType, err error) {
 		// Find end of snapshot version, starting with the version prefix
 		// + 16 for the datetime
 		end := findNonNumeric(filename, l+16)
-		v.snapshotVersion = toNullString(filename[:end])
+		v.snapshotVersion = db.ToNullString(filename[:end])
 
 		filename = filename[end:]
 	} else {
@@ -59,7 +60,7 @@ func parsePath(path string) (v version, a artifactType, err error) {
 	if filename[0] == '-' {
 		// Classifier, find end
 		end := strings.LastIndexByte(filename, '.')
-		a.classifier = toNullString(filename[1:end])
+		a.classifier = db.ToNullString(filename[1:end])
 
 		filename = filename[end:]
 	} else if filename[0] != '.' {
