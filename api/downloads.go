@@ -100,7 +100,8 @@ func (a *API) GetDownloads(ctx *macaron.Context) {
 
 	first := true
 
-	downloads := make(map[int]*download)
+	var downloads []*download
+	downloadsMap := make(map[int]*download)
 
 	for rows.Next() {
 		var id int
@@ -122,7 +123,8 @@ func (a *API) GetDownloads(ctx *macaron.Context) {
 
 		ids.WriteString(strconv.Itoa(id))
 
-		downloads[id] = &dl
+		downloads = append(downloads, &dl)
+		downloadsMap[id] = &dl
 	}
 
 	ids.WriteByte(')')
@@ -145,7 +147,7 @@ func (a *API) GetDownloads(ctx *macaron.Context) {
 			panic(err)
 		}
 
-		dl := downloads[id]
+		dl := downloadsMap[id]
 
 		artifact.URL = urlPrefix + dl.Version + "/" + artifactID + "-" + nilFallback(dl.SnapshotVersion, dl.Version)
 
@@ -158,18 +160,11 @@ func (a *API) GetDownloads(ctx *macaron.Context) {
 		dl.Artifacts = append(dl.Artifacts, &artifact)
 	}
 
-	dls := make([]*download, len(downloads))
-	i = 0
-	for _, dl := range downloads {
-		if changelog {
+	if changelog {
 
-		}
-
-		dls[i] = dl
-		i++
 	}
 
-	ctx.JSON(http.StatusOK, dls)
+	ctx.JSON(http.StatusOK, downloads)
 }
 
 func nilFallback(a *string, b string) string {
