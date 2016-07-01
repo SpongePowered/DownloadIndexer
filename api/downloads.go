@@ -5,28 +5,39 @@ import (
 	"database/sql"
 	"gopkg.in/macaron.v1"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 )
 
 type download struct {
-	id uint
-
 	Version         string    `json:"version"`
-	SnapshotVersion string    `json:"snapshotVersion,omitempty"`
+	SnapshotVersion *string   `json:"snapshotVersion,omitempty"`
 	Type            string    `json:"type"`
 	Minecraft       string    `json:"minecraft"`
 	Commit          string    `json:"commit"`
 	Label           string    `json:"label,omitempty"`
 	Published       time.Time `json:"published"`
+
+	Artifacts []*artifact `json:"artifacts"`
+}
+
+type artifact struct {
+	Classifier *string `json:"classifier,omitempty"`
+	Extension  string  `json:"extension"`
+	URL        string  `json:"url"`
+	SHA1       string  `json:"sha1,omitempty"`
+	MD5        string  `json:"md5,omitempty"`
 }
 
 func (a *API) GetDownloads(ctx *macaron.Context) {
 	identifier := ctx.Params("project")
 
 	var projectID uint
+	var groupID, artifactID string
 
-	row := a.db.QueryRow("SELECT id FROM projects WHERE identifier = $1;", identifier)
-	err := row.Scan(&projectID)
+	row := a.db.QueryRow("SELECT id, group_id, artifact_id FROM projects WHERE identifier = $1;", identifier)
+	err := row.Scan(&projectID, &groupID, &artifactID)
 	if err != nil {
 		panic(err)
 	}
@@ -84,26 +95,86 @@ func (a *API) GetDownloads(ctx *macaron.Context) {
 		panic(err)
 	}
 
-	var downloads []download
+	var ids bytes.Buffer
+	ids.WriteByte('(')
+
+	first := true
+
+	downloads := make(map[int]*download)
 
 	for rows.Next() {
+		var id int
 		var dl download
 		var label sql.NullString
 
-		err = rows.Scan(&dl.id, &dl.Version, &dl.SnapshotVersion, &dl.Type, &dl.Minecraft, &dl.Commit, &label, &dl.Published)
+		err = rows.Scan(&id, &dl.Version, &dl.SnapshotVersion, &dl.Type, &dl.Minecraft, &dl.Commit, &label, &dl.Published)
 		if err != nil {
 			panic(err)
 		}
 
 		dl.Label = label.String
-		downloads = append(downloads, dl)
+
+		if first {
+			first = false
+		} else {
+			ids.WriteByte(',')
+		}
+
+		ids.WriteString(strconv.Itoa(id))
+
+		downloads[id] = &dl
 	}
+
+	ids.WriteByte(')')
 
 	rows.Close()
 
-	if changelog {
-
+	rows, err = a.db.Query("SELECT download_id, classifier, extension, sha1, md5 FROM artifacts WHERE download_id IN " + ids.String() + ";")
+	if err != nil {
+		panic(err)
 	}
 
-	ctx.JSON(http.StatusOK, downloads)
+	urlPrefix := a.target + strings.Replace(groupID, ".", "/", -1) + "/" + artifactID + "/"
+
+	for rows.Next() {
+		var id int
+		var artifact artifact
+
+		err = rows.Scan(&id, &artifact.Classifier, &artifact.Extension, &artifact.SHA1, &artifact.MD5)
+		if err != nil {
+			panic(err)
+		}
+
+		dl := downloads[id]
+
+		artifact.URL = urlPrefix + dl.Version + "/" + artifactID + "-" + nilFallback(dl.SnapshotVersion, dl.Version)
+
+		if artifact.Classifier != nil {
+			artifact.URL += "-" + *artifact.Classifier
+		}
+
+		artifact.URL += "." + artifact.Extension
+
+		dl.Artifacts = append(dl.Artifacts, &artifact)
+	}
+
+	dls := make([]*download, len(downloads))
+	i = 0
+	for _, dl := range downloads {
+		if changelog {
+
+		}
+
+		dls[i] = dl
+		i++
+	}
+
+	ctx.JSON(http.StatusOK, dls)
+}
+
+func nilFallback(a *string, b string) string {
+	if a == nil {
+		return b
+	}
+	return *a
 }

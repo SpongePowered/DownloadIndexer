@@ -59,8 +59,8 @@ func (a *API) GetProject(ctx *macaron.Context) {
 		panic(err)
 	}
 
-	var buffer bytes.Buffer
-	buffer.WriteByte('(')
+	var ids bytes.Buffer
+	ids.WriteByte('(')
 
 	first := true
 
@@ -77,23 +77,23 @@ func (a *API) GetProject(ctx *macaron.Context) {
 		if first {
 			first = false
 		} else {
-			buffer.WriteByte(',')
+			ids.WriteByte(',')
 		}
 
-		buffer.WriteString(strconv.Itoa(id))
+		ids.WriteString(strconv.Itoa(id))
 
 		if main {
 			p.BuildTypes = append(p.BuildTypes, &buildType{id: id, Name: name})
 		}
 	}
 
-	buffer.WriteByte(')')
+	ids.WriteByte(')')
 	rows.Close()
 
 	rows, err = a.db.Query("SELECT branch_id, minecraft FROM downloads " +
 		"WHERE (branch_id, published) IN (" +
 		"SELECT branch_id, MAX(published) FROM downloads " +
-		"WHERE branch_id IN " + buffer.String() + " GROUP BY branch_id);")
+		"WHERE branch_id IN " + ids.String() + " GROUP BY branch_id);")
 	if err != nil {
 		panic(err)
 	}
