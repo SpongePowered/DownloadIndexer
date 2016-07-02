@@ -5,13 +5,14 @@ import "database/sql"
 func createTables(db *sql.DB) (err error) {
 	_, err = db.Exec(
 		`CREATE TABLE projects (
-			id serial primary key,
-			identifier varchar(32) not null UNIQUE,
-			name varchar(32) not null,
-			url varchar(96) not null,
-			group_id varchar(32) not null,
-			artifact_id varchar(32) not null,
-			UNIQUE(group_id, artifact_id)
+			id smallserial primary key,
+			group_id text not null,
+			artifact_id text not null,
+			name text not null,
+			github_owner text not null,
+			github_repo text not null,
+			UNIQUE(group_id, artifact_id),
+			UNIQUE(github_owner, github_repo)
 		);`,
 	)
 
@@ -21,10 +22,10 @@ func createTables(db *sql.DB) (err error) {
 
 	_, err = db.Exec(
 		`CREATE TABLE branches (
-			id serial primary key,
-			project_id int references projects(id) not null,
-			name varchar(32) not null,
-			type varchar(16) not null,
+			id smallserial primary key,
+			project_id smallint references projects(id) not null,
+			name text not null,
+			type text not null,
 			main boolean not null,
 			obsolete boolean not null,
 			UNIQUE(project_id, name)
@@ -38,14 +39,14 @@ func createTables(db *sql.DB) (err error) {
 	_, err = db.Exec(
 		`CREATE TABLE downloads (
 			id serial primary key,
-			project_id int references projects(id) not null,
-			version varchar(32) not null,
-			snapshot_version varchar(32),
-			minecraft varchar(16),
-			label varchar(32),
+			project_id smallint references projects(id) not null,
+			branch_id smallint references branches(id) not null,
+			version text not null,
+			snapshot_version text,
 			published timestamp(0) with time zone not null,
 			commit char(40) not null,
-			branch_id int references branches(id) not null,
+			minecraft text,
+			label text,
 			UNIQUE(branch_id, published)
 		);`,
 	)
@@ -58,8 +59,9 @@ func createTables(db *sql.DB) (err error) {
 		`CREATE TABLE artifacts (
 			id serial primary key,
 			download_id int references downloads(id) not null,
-			classifier varchar(16),
-			extension varchar(8) not null,
+			classifier text,
+			extension text not null,
+			size int not null,
 			sha1 char(40),
 			md5 char(32)
 		);`,
@@ -71,11 +73,11 @@ func createTables(db *sql.DB) (err error) {
 func addProjects(db *sql.DB) (err error) {
 	_, err = db.Exec(`INSERT INTO projects VALUES (
 		DEFAULT,
-		'maventest',
-		'MavenTest',
-		'https://github.com/Minecrell/maventest',
 		'net.minecrell',
 		'maventest'
+		'MavenTest',
+		'Minecrell',
+		'maventest',
 	);`)
 
 	return

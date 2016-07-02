@@ -3,6 +3,8 @@ package api
 import (
 	"bytes"
 	"database/sql"
+	"github.com/Minecrell/SpongeDownloads/downloads"
+	"github.com/Minecrell/SpongeDownloads/downloads/maven"
 	"gopkg.in/macaron.v1"
 	"net/http"
 	"strconv"
@@ -30,16 +32,16 @@ type artifact struct {
 	MD5        string  `json:"md5,omitempty"`
 }
 
-func (a *API) GetDownloads(ctx *macaron.Context) {
+func (a *API) GetDownloads(ctx *macaron.Context, project maven.Coordinates) error {
 	identifier := ctx.Params("project")
 
 	var projectID uint
 	var groupID, artifactID string
 
-	row := a.db.QueryRow("SELECT id, group_id, artifact_id FROM projects WHERE identifier = $1;", identifier)
+	row := a.DB.QueryRow("SELECT id, group_id, artifact_id FROM projects WHERE identifier = $1;", identifier)
 	err := row.Scan(&projectID, &groupID, &artifactID)
 	if err != nil {
-		panic(err)
+		return downloads.InternalError("Database error (failed to lookup project)", err)
 	}
 
 	buildType := ctx.Query("type")
@@ -90,9 +92,9 @@ func (a *API) GetDownloads(ctx *macaron.Context) {
 	buffer.WriteByte('0' + i)
 	buffer.WriteByte(';')
 
-	rows, err := a.db.Query(buffer.String(), args...)
+	rows, err := a.DB.Query(buffer.String(), args...)
 	if err != nil {
-		panic(err)
+		return downloads.InternalError("Database error (failed to lookup downloads)", err)
 	}
 
 	var ids bytes.Buffer
@@ -100,7 +102,7 @@ func (a *API) GetDownloads(ctx *macaron.Context) {
 
 	first := true
 
-	var downloads []*download
+	var downloadsSlice []*download
 	downloadsMap := make(map[int]*download)
 
 	for rows.Next() {
@@ -110,7 +112,7 @@ func (a *API) GetDownloads(ctx *macaron.Context) {
 
 		err = rows.Scan(&id, &dl.Version, &dl.SnapshotVersion, &dl.Type, &dl.Minecraft, &dl.Commit, &label, &dl.Published)
 		if err != nil {
-			panic(err)
+			return downloads.InternalError("Database error (failed to read downloads)", err)
 		}
 
 		dl.Label = label.String
@@ -123,7 +125,7 @@ func (a *API) GetDownloads(ctx *macaron.Context) {
 
 		ids.WriteString(strconv.Itoa(id))
 
-		downloads = append(downloads, &dl)
+		downloadsSlice = append(downloadsSlice, &dl)
 		downloadsMap[id] = &dl
 	}
 
@@ -131,12 +133,12 @@ func (a *API) GetDownloads(ctx *macaron.Context) {
 
 	rows.Close()
 
-	rows, err = a.db.Query("SELECT download_id, classifier, extension, sha1, md5 FROM artifacts WHERE download_id IN " + ids.String() + ";")
+	rows, err = a.DB.Query("SELECT download_id, classifier, extension, sha1, md5 FROM artifacts WHERE download_id IN " + ids.String() + ";")
 	if err != nil {
-		panic(err)
+		return downloads.InternalError("Database error (failed to lookup artifacts)", err)
 	}
 
-	urlPrefix := a.target + strings.Replace(groupID, ".", "/", -1) + "/" + artifactID + "/"
+	urlPrefix := a.Repo + strings.Replace(groupID, ".", "/", -1) + "/" + artifactID + "/"
 
 	for rows.Next() {
 		var id int
@@ -144,7 +146,7 @@ func (a *API) GetDownloads(ctx *macaron.Context) {
 
 		err = rows.Scan(&id, &artifact.Classifier, &artifact.Extension, &artifact.SHA1, &artifact.MD5)
 		if err != nil {
-			panic(err)
+			return downloads.InternalError("Database error (failed to read artifacts)", err)
 		}
 
 		dl := downloadsMap[id]
@@ -164,7 +166,8 @@ func (a *API) GetDownloads(ctx *macaron.Context) {
 
 	}
 
-	ctx.JSON(http.StatusOK, downloads)
+	ctx.JSON(http.StatusOK, downloadsSlice)
+	return nil
 }
 
 func nilFallback(a *string, b string) string {

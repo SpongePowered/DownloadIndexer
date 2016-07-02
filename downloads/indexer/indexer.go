@@ -4,8 +4,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"database/sql"
-	"errors"
-	"github.com/Minecrell/SpongeDownloads/db"
+	"github.com/Minecrell/SpongeDownloads/downloads"
+	"github.com/Minecrell/SpongeDownloads/downloads/db"
 	"io"
 	"strings"
 	"sync"
@@ -13,8 +13,7 @@ import (
 )
 
 type Indexer struct {
-	db     *sql.DB
-	target string
+	*downloads.Service
 
 	cache     map[version]*download
 	cacheLock sync.RWMutex
@@ -31,7 +30,7 @@ type download struct {
 	projectID uint
 	lock      sync.Mutex
 
-	id        uint
+	id        int
 	uploaded  time.Time
 	artifacts map[artifactType]*artifact
 }
@@ -43,17 +42,14 @@ type artifactType struct {
 
 type artifact struct {
 	uploaded bool
-	id       uint
+	id       int
+	size     int
 	md5      sql.NullString
 	sha1     sql.NullString
 }
 
-func Create(db *sql.DB, target string) *Indexer {
-	return &Indexer{db: db, target: target, cache: make(map[version]*download)}
-}
-
-func (i *Indexer) Redirect(path string) string {
-	return i.target + path
+func Create(m *downloads.Manager) *Indexer {
+	return &Indexer{Service: m.Service("Indexer"), cache: make(map[version]*download)}
 }
 
 // TODO: Better error handling
@@ -76,7 +72,7 @@ func (i *Indexer) Upload(path string, data []byte) (err error) {
 
 	v, at, err := parsePath(path)
 	if err != nil {
-		return
+		return downloads.BadRequest("Invalid path", err)
 	}
 
 	i.cacheLock.RLock()
@@ -92,14 +88,14 @@ func (i *Indexer) Upload(path string, data []byte) (err error) {
 		d.lock.Lock()
 		defer d.lock.Unlock()
 
-		row := i.db.QueryRow("SELECT id FROM projects WHERE group_ID = $1 AND artifact_id = $2;", v.groupID, v.artifactID)
+		row := i.DB.QueryRow("SELECT id FROM projects WHERE group_id = $1 AND artifact_id = $2;", v.groupID, v.artifactID)
 		err = row.Scan(&d.projectID)
 		if err != nil && err != sql.ErrNoRows {
-			return
+			return downloads.InternalError("Database error (failed to lookup project)", err)
 		}
 
 		if d.projectID == 0 {
-			return
+			return nil
 		}
 
 		d.uploaded = time.Now()
@@ -122,17 +118,18 @@ func (i *Indexer) Upload(path string, data []byte) (err error) {
 
 	if md5 {
 		err = a.setMD5(i, data)
+		if err != nil {
+			return
+		}
 	} else if sha1 {
 		err = a.setSHA1(i, data)
-	} else if a.uploaded {
-		err = errors.New("Artifact already uploaded")
-	} else {
+		if err != nil {
+			return
+		}
+	} else if !a.uploaded {
 		// Is this the main artifact?
 		if !at.classifier.Valid && at.extension == "jar" {
-			err = d.create(i, v, data)
-			if err != nil {
-				return
-			}
+			d.create(i, v, data)
 
 			for at, a := range d.artifacts {
 				if a.uploaded && a.id == 0 {
@@ -144,96 +141,103 @@ func (i *Indexer) Upload(path string, data []byte) (err error) {
 			}
 		}
 
+		a.size = len(data)
 		a.uploaded = true
 
 		if d.id > 0 {
 			err = a.create(i, d, at)
+			if err != nil {
+				return
+			}
 		}
 	}
 
 	return
 }
 
-func (d *download) create(i *Indexer, v version, mainJar []byte) (err error) {
+func (d *download) create(i *Indexer, v version, mainJar []byte) error {
 	m, err := d.readManifest(mainJar)
 	if err != nil {
-		return
+		return downloads.BadRequest("Failed to read JAR file", err)
 	}
 
 	if m == nil {
-		err = errors.New("Missing JAR manifest")
-		return
+		return downloads.BadRequest("Missing manifest in JAR", err)
 	}
 
 	commit := m["Git-Commit"]
 	if commit == "" {
-		err = errors.New("Missing Git commit in JAR manifest")
-		return
+		return downloads.BadRequest("Missing Git-Commit in manifest", err)
 	}
 
 	branch := m["Git-Branch"]
 	if branch == "" {
-		err = errors.New("Missing Git branch in JAR manifes")
-		return
+		return downloads.BadRequest("Missing Git-Branch in manifest", err)
 	}
 
 	minecraft := db.ToNullString(m["Minecraft-Version"])
 
-	var branchID uint
-	row := i.db.QueryRow("SELECT id FROM branches WHERE project_id = $1 AND name = $2;", d.projectID, branch)
+	var branchID int
+	row := i.DB.QueryRow("SELECT id FROM branches WHERE project_id = $1 AND name = $2;", d.projectID, branch)
 	err = row.Scan(&branchID)
 	if err != nil {
 		if err != sql.ErrNoRows {
-			return
+			return downloads.InternalError("Database error (failed to select branch)", err)
 		}
 
 		t, ok := substringBefore(branch, '-')
-		row = i.db.QueryRow("INSERT INTO branches VALUES (DEFAULT, $1, $2, $3, $4, FALSE) RETURNING id;", d.projectID, branch, t, !ok)
+		row = i.DB.QueryRow("INSERT INTO branches VALUES (DEFAULT, $1, $2, $3, $4, FALSE) RETURNING id;", d.projectID, branch, t, !ok)
 		err = row.Scan(&branchID)
 		if err != nil {
-			return
+			return downloads.InternalError("Database error (failed to add branch)", err)
 		}
 	}
 
-	row = i.db.QueryRow("INSERT INTO downloads VALUES (DEFAULT, $1, $2, $3, $4, NULL, $5, $6, $7) RETURNING id;", d.projectID, v.version, v.snapshotVersion, minecraft, d.uploaded, commit, branchID)
+	row = i.DB.QueryRow("INSERT INTO downloads VALUES (DEFAULT, $1, $2, $3, $4, $5, $6, $7, NULL) RETURNING id;", d.projectID, branchID, v.version, v.snapshotVersion, d.uploaded, commit, minecraft)
 	err = row.Scan(&d.id)
-	return
+	return nil
 }
 
-func (a *artifact) create(i *Indexer, d *download, at artifactType) (err error) {
-	row := i.db.QueryRow("INSERT INTO artifacts VALUES (DEFAULT, $1, $2, $3, $4, $5) RETURNING id;", d.id, at.classifier, at.extension, a.sha1, a.md5)
-	err = row.Scan(&a.id)
-	return
+func (a *artifact) create(i *Indexer, d *download, at artifactType) error {
+	row := i.DB.QueryRow("INSERT INTO artifacts VALUES (DEFAULT, $1, $2, $3, $4, $5, $6) RETURNING id;", d.id, at.classifier, at.extension, a.size, a.sha1, a.md5)
+	if err := row.Scan(&a.id); err != nil {
+		return downloads.InternalError("Database error (failed to create artifact)", err)
+	}
+	return nil
 }
 
 func decodeHash(data []byte) string {
 	return strings.ToLower(strings.TrimSpace(string(data)))
 }
 
-func (a *artifact) setMD5(i *Indexer, data []byte) (err error) {
+func (a *artifact) setMD5(i *Indexer, data []byte) error {
 	hash := decodeHash(data)
 
 	// If artifact was already created
 	if a.id > 0 {
-		_, err = i.db.Exec("UPDATE artifacts SET md5 = $1 WHERE id = $2;", hash, a.id)
+		if _, err := i.DB.Exec("UPDATE artifacts SET md5 = $1 WHERE id = $2;", hash, a.id); err != nil {
+			return downloads.InternalError("Database error (failed to update MD5 sum)", err)
+		}
 	} else {
 		a.md5 = db.ToNullString(hash)
 	}
 
-	return
+	return nil
 }
 
-func (a *artifact) setSHA1(i *Indexer, data []byte) (err error) {
+func (a *artifact) setSHA1(i *Indexer, data []byte) error {
 	hash := decodeHash(data)
 
 	// If artifact was already created
 	if a.id > 0 {
-		_, err = i.db.Exec("UPDATE artifacts SET sha1 = $1 WHERE id = $2;", hash, a.id)
+		if _, err := i.DB.Exec("UPDATE artifacts SET sha1 = $1 WHERE id = $2;", hash, a.id); err != nil {
+			return downloads.InternalError("Database error (failed to update SHA1 sum)", err)
+		}
 	} else {
 		a.sha1 = db.ToNullString(hash)
 	}
 
-	return
+	return nil
 }
 
 func (d *download) readManifest(mainJar []byte) (m manifest, err error) {

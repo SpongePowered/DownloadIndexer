@@ -1,29 +1,27 @@
 package main
 
 import (
-	"github.com/Minecrell/SpongeDownloads/api"
-	"github.com/Minecrell/SpongeDownloads/db"
-	"github.com/Minecrell/SpongeDownloads/indexer"
-	"github.com/Minecrell/SpongeDownloads/maven"
+	"github.com/Minecrell/SpongeDownloads/downloads"
+	"github.com/Minecrell/SpongeDownloads/downloads/api"
+	"github.com/Minecrell/SpongeDownloads/downloads/db"
+	"github.com/Minecrell/SpongeDownloads/downloads/indexer"
+	"github.com/Minecrell/SpongeDownloads/downloads/maven"
 	"github.com/go-macaron/auth"
 	"gopkg.in/macaron.v1"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 )
 
 func main() {
+	repo := requireEnv("MAVEN_REPO")
 	user := requireEnv("MAVEN_USER")
 	password := requireEnv("MAVEN_PASSWORD")
 
 	ftpHost := requireEnv("FTP_HOST")
 	ftpUser := requireEnv("FTP_USER")
 	ftpPassword := requireEnv("FTP_PASSWORD")
-
-	ftpUploader, err := maven.CreateFTPUploader(ftpHost, ftpUser, ftpPassword)
-	if err != nil {
-		log.Fatalln(err)
-	}
 
 	target := requireEnv("MAVEN_REPO")
 
@@ -32,22 +30,31 @@ func main() {
 		target += "/"
 	}
 
-	// Database
 	postgresUrl := requireEnv("POSTGRES_URL")
-	postgresDb, err := db.ConnectPostgres(postgresUrl)
+	/*repoStorage := */ requireEnv("REPO_STORAGE")
+
+	// Connect to database
+	postgresDB, err := db.ConnectPostgres(postgresUrl)
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	// TODO
-	//db.Reset(postgresDb)
+	db.Reset(postgresDB) // TODO
 
-	// Initialize indexer
-	indexer := indexer.Create(postgresDb, target)
-	api := api.Create(postgresDb, target)
+	manager := &downloads.Manager{repo, postgresDB}
+
+	// Setup FTP uploader (does not connect to the FTP server yet)
+	ftpUploader, err := maven.CreateFTPUploader(ftpHost, ftpUser, ftpPassword)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	// Initialize indexer and API
+	indexer := indexer.Create(manager)
+	api := api.Create(manager)
 
 	// Initialize Maven proxy
-	proxy := &maven.Proxy{Target: target, Uploader: []maven.Uploader{indexer, ftpUploader}}
+	proxy := &maven.Proxy{Repo: repo, Uploader: []maven.Uploader{indexer, ftpUploader}}
 
 	// Initialize web framework
 	m := macaron.New()
@@ -55,37 +62,38 @@ func main() {
 	m.Use(macaron.Recovery())
 
 	m.Group("/api/v1", func() {
+
+		m.Map(downloads.ErrorHandler(api.Log))
+
 		m.Use(macaron.Renderer())
 
-		m.Get("/", api.GetVersion)
-		m.Get("/projects", api.GetProjects)
-		m.Get("/project/:project", api.GetProject)
-		m.Get("/project/:project/downloads", api.GetDownloads)
+		m.Get("/", api.GetProjects)
+		m.Get("/*", func(ctx *macaron.Context) error {
+			parts := strings.Split(ctx.Params("*"), "/")
+
+			if len(parts) < 2 {
+				ctx.Status(http.StatusNotFound)
+				return nil
+			}
+
+			handler := api.GetProject
+			i := len(parts) - 1
+
+			// TODO: How can I make go-macaron recognize this directly?
+			if parts[i] == "downloads" {
+				i--
+				handler = api.GetDownloads
+			}
+
+			return handler(ctx, maven.Coordinates{strings.Join(parts[:i], "."), parts[i]})
+		})
 	})
 
 	m.Group("/maven/upload", func() {
+		m.Map(downloads.ErrorHandler(indexer.Log))
 
-		// Redirect to real Maven repository for metadata
-		m.Get("/*", func(ctx *macaron.Context) {
-			ctx.Redirect(proxy.Get(ctx.Params("*")), http.StatusMovedPermanently)
-		})
-
-		// Handle uploads to Maven repository
-		m.Put("/*", func(ctx *macaron.Context) (int, string) {
-			bytes, err := ctx.Req.Body().Bytes()
-			if err != nil {
-				panic(err) // TODO: Error handling
-			}
-
-			err = proxy.Upload(ctx.Params("*"), bytes)
-			if err != nil {
-				panic(err) // TODO: Error handling
-			}
-
-			return http.StatusOK, "OK"
-		},
-			auth.Basic(user, password)) // Use authentication for uploading
-
+		m.Get("/*", proxy.Redirect)
+		m.Put("/*", auth.Basic(user, password), proxy.Upload)
 	})
 
 	m.Run()

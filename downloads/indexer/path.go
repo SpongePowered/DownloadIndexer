@@ -2,7 +2,7 @@ package indexer
 
 import (
 	"errors"
-	"github.com/Minecrell/SpongeDownloads/db"
+	"github.com/Minecrell/SpongeDownloads/downloads/db"
 	"strings"
 )
 

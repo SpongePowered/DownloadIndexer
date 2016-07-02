@@ -2,6 +2,7 @@ package maven
 
 import (
 	"bytes"
+	"github.com/Minecrell/SpongeDownloads/downloads"
 	"github.com/secsy/goftp"
 	"strings"
 )
@@ -24,7 +25,12 @@ func (ftp *ftpUploader) Upload(path string, data []byte) error {
 		ftp.client.Mkdir(dir)
 	}
 
-	return ftp.client.Store(path, bytes.NewReader(data))
+	err := ftp.client.Store(path, bytes.NewReader(data))
+	if err != nil {
+		return downloads.BadGateway("Failed to upload upstream file", err)
+	}
+
+	return nil
 }
 
 func splitPath(path string) []string {
