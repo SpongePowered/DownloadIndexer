@@ -39,7 +39,11 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	db.Reset(postgresDB) // TODO
+	// TODO
+	/*err = db.Reset(postgresDB)
+	if err != nil {
+		log.Fatalln(err)
+	}*/
 
 	manager := &downloads.Manager{repo, postgresDB}
 

@@ -28,18 +28,16 @@ type artifact struct {
 	Classifier *string `json:"classifier,omitempty"`
 	Extension  string  `json:"extension"`
 	URL        string  `json:"url"`
+	Size       int     `json:"size"`
 	SHA1       string  `json:"sha1,omitempty"`
 	MD5        string  `json:"md5,omitempty"`
 }
 
 func (a *API) GetDownloads(ctx *macaron.Context, project maven.Coordinates) error {
-	identifier := ctx.Params("project")
-
 	var projectID uint
-	var groupID, artifactID string
 
-	row := a.DB.QueryRow("SELECT id, group_id, artifact_id FROM projects WHERE identifier = $1;", identifier)
-	err := row.Scan(&projectID, &groupID, &artifactID)
+	row := a.DB.QueryRow("SELECT id FROM projects WHERE group_id = $1 AND artifact_id = $2;", project.GroupID, project.ArtifactID)
+	err := row.Scan(&projectID)
 	if err != nil {
 		return downloads.InternalError("Database error (failed to lookup project)", err)
 	}
@@ -133,25 +131,25 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Coordinates) erro
 
 	rows.Close()
 
-	rows, err = a.DB.Query("SELECT download_id, classifier, extension, sha1, md5 FROM artifacts WHERE download_id IN " + ids.String() + ";")
+	rows, err = a.DB.Query("SELECT download_id, classifier, extension, size, sha1, md5 FROM artifacts WHERE download_id IN " + ids.String() + ";")
 	if err != nil {
 		return downloads.InternalError("Database error (failed to lookup artifacts)", err)
 	}
 
-	urlPrefix := a.Repo + strings.Replace(groupID, ".", "/", -1) + "/" + artifactID + "/"
+	urlPrefix := a.Repo + strings.Replace(project.GroupID, ".", "/", -1) + "/" + project.ArtifactID + "/"
 
 	for rows.Next() {
 		var id int
 		var artifact artifact
 
-		err = rows.Scan(&id, &artifact.Classifier, &artifact.Extension, &artifact.SHA1, &artifact.MD5)
+		err = rows.Scan(&id, &artifact.Classifier, &artifact.Extension, &artifact.Size, &artifact.SHA1, &artifact.MD5)
 		if err != nil {
 			return downloads.InternalError("Database error (failed to read artifacts)", err)
 		}
 
 		dl := downloadsMap[id]
 
-		artifact.URL = urlPrefix + dl.Version + "/" + artifactID + "-" + nilFallback(dl.SnapshotVersion, dl.Version)
+		artifact.URL = urlPrefix + dl.Version + "/" + project.ArtifactID + "-" + nilFallback(dl.SnapshotVersion, dl.Version)
 
 		if artifact.Classifier != nil {
 			artifact.URL += "-" + *artifact.Classifier

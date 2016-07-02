@@ -74,10 +74,10 @@ func addProjects(db *sql.DB) (err error) {
 	_, err = db.Exec(`INSERT INTO projects VALUES (
 		DEFAULT,
 		'net.minecrell',
-		'maventest'
+		'maventest',
 		'MavenTest',
 		'Minecrell',
-		'maventest',
+		'maventest'
 	);`)
 
 	return

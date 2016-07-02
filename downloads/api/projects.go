@@ -10,17 +10,13 @@ import (
 	"strconv"
 )
 
-type projectCoordinates struct {
-	GroupID    string `json:"groupId"`
-	ArtifactID string `json:"artifactId"`
-}
-
 type project struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	URL        string `json:"url"`
-	GroupID    string `json:"groupId"`
-	ArtifactID string `json:"artifactId"`
+	maven.Coordinates
+	Name   string `json:"name"`
+	GitHub struct {
+		Owner string `json:"owner"`
+		Repo  string `json:"repo"`
+	} `json:"github"`
 
 	BuildTypes []*buildType     `json:"buildTypes,omitempty"`
 	Minecraft  minecraftSupport `json:"minecraft"`
@@ -45,9 +41,9 @@ func (a *API) GetProjects(ctx *macaron.Context) error {
 
 	defer rows.Close()
 
-	var result []projectCoordinates
+	var result []maven.Coordinates
 	for rows.Next() {
-		var coordinates projectCoordinates
+		var coordinates maven.Coordinates
 		err = rows.Scan(&coordinates.GroupID, &coordinates.ArtifactID)
 		if err != nil {
 			return downloads.InternalError("Database error (failed to read project)", err)
@@ -60,14 +56,12 @@ func (a *API) GetProjects(ctx *macaron.Context) error {
 	return nil
 }
 
-func (a *API) GetProject(ctx *macaron.Context, coordinate maven.Coordinates) error {
-	identifier := ctx.Params("project")
-
+func (a *API) GetProject(ctx *macaron.Context, c maven.Coordinates) error {
 	var p project
 	var projectID uint
 
-	row := a.DB.QueryRow("SELECT * FROM projects WHERE identifier = $1;", identifier)
-	err := row.Scan(&projectID, &p.ID, &p.Name, &p.URL, &p.GroupID, &p.ArtifactID)
+	row := a.DB.QueryRow("SELECT * FROM projects WHERE group_id = $1 AND artifact_id = $2;", c.GroupID, c.ArtifactID)
+	err := row.Scan(&projectID, &p.GroupID, &p.ArtifactID, &p.Name, &p.GitHub.Owner, &p.GitHub.Repo)
 	if err != nil {
 		return downloads.InternalError("Database error (failed to lookup project)", err)
 	}
