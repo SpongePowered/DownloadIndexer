@@ -129,7 +129,10 @@ func (i *Indexer) Upload(path string, data []byte) (err error) {
 	} else if !a.uploaded {
 		// Is this the main artifact?
 		if !at.classifier.Valid && at.extension == "jar" {
-			d.create(i, v, data)
+			err = d.create(i, v, data)
+			if err != nil {
+				return
+			}
 
 			for at, a := range d.artifacts {
 				if a.uploaded && a.id == 0 {
@@ -180,6 +183,8 @@ func (d *download) create(i *Indexer, v version, mainJar []byte) error {
 	var branchID int
 	row := i.DB.QueryRow("SELECT id FROM branches WHERE project_id = $1 AND name = $2;", d.projectID, branch)
 	err = row.Scan(&branchID)
+
+	var parentCommit sql.NullString
 	if err != nil {
 		if err != sql.ErrNoRows {
 			return downloads.InternalError("Database error (failed to select branch)", err)
@@ -191,10 +196,22 @@ func (d *download) create(i *Indexer, v version, mainJar []byte) error {
 		if err != nil {
 			return downloads.InternalError("Database error (failed to add branch)", err)
 		}
+	} else {
+		// Attempt to find parent commit
+		row = i.DB.QueryRow("SELECT commit FROM downloads WHERE branch_id = $1 ORDER BY published DESC LIMIT 1;", branchID)
+		err = row.Scan(&parentCommit)
+		if err != nil && err != sql.ErrNoRows {
+			return downloads.InternalError("Database error (failed to find parent commit)", err)
+		}
 	}
 
-	row = i.DB.QueryRow("INSERT INTO downloads VALUES (DEFAULT, $1, $2, $3, $4, $5, $6, $7, NULL) RETURNING id;", d.projectID, branchID, v.version, v.snapshotVersion, d.uploaded, commit, minecraft)
+	row = i.DB.QueryRow("INSERT INTO downloads VALUES (DEFAULT, $1, $2, $3, $4, $5, $6, $7, NULL, $8) RETURNING id;",
+		d.projectID, branchID, v.version, v.snapshotVersion, d.uploaded, commit, minecraft, parentCommit)
 	err = row.Scan(&d.id)
+	if err != nil {
+		return downloads.InternalError("Database error (failed to add download)", err)
+	}
+
 	return nil
 }
 

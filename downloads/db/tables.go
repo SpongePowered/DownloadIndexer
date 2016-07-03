@@ -47,6 +47,7 @@ func createTables(db *sql.DB) (err error) {
 			commit char(40) not null,
 			minecraft text,
 			label text,
+			parent_commit char(40),
 			UNIQUE(branch_id, published)
 		);`,
 	)

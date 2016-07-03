@@ -23,11 +23,9 @@ func main() {
 	ftpUser := requireEnv("FTP_USER")
 	ftpPassword := requireEnv("FTP_PASSWORD")
 
-	target := requireEnv("MAVEN_REPO")
-
 	// Make sure target ends with a slash
-	if target[len(target)-1] != '/' {
-		target += "/"
+	if repo[len(repo)-1] != '/' {
+		repo += "/"
 	}
 
 	postgresUrl := requireEnv("POSTGRES_URL")
