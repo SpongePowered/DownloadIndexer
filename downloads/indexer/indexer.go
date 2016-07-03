@@ -27,8 +27,10 @@ type version struct {
 }
 
 type download struct {
-	projectID uint
-	lock      sync.Mutex
+	projectID   uint
+	githubOwner string
+	githubRepo  string
+	lock        sync.Mutex
 
 	id        int
 	uploaded  time.Time
@@ -88,8 +90,8 @@ func (i *Indexer) Upload(path string, data []byte) (err error) {
 		d.lock.Lock()
 		defer d.lock.Unlock()
 
-		row := i.DB.QueryRow("SELECT id FROM projects WHERE group_id = $1 AND artifact_id = $2;", v.groupID, v.artifactID)
-		err = row.Scan(&d.projectID)
+		row := i.DB.QueryRow("SELECT id, github_owner, github_repo FROM projects WHERE group_id = $1 AND artifact_id = $2;", v.groupID, v.artifactID)
+		err = row.Scan(&d.projectID, &d.githubOwner, &d.githubRepo)
 		if err != nil && err != sql.ErrNoRows {
 			return downloads.InternalError("Database error (failed to lookup project)", err)
 		}
@@ -179,6 +181,20 @@ func (d *download) create(i *Indexer, v version, mainJar []byte) error {
 	}
 
 	minecraft := db.ToNullString(m["Minecraft-Version"])
+
+	// TODO: Re-enable this? Currently only fetched directly in API call
+	/*// Fetch commit
+	repo, err := i.Git.OpenGitHub(d.githubOwner, d.githubRepo)
+	if err != nil {
+		return downloads.InternalError("Git error (failed to open repository)", err)
+	}
+
+	err = repo.FetchCommit(commit)
+	repo.Close()
+
+	if err != nil {
+		return downloads.InternalError("Git error (failed to fetch commit)", err)
+	}*/
 
 	var branchID int
 	row := i.DB.QueryRow("SELECT id FROM branches WHERE project_id = $1 AND name = $2;", d.projectID, branch)

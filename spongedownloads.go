@@ -6,6 +6,7 @@ import (
 	"github.com/Minecrell/SpongeDownloads/downloads/db"
 	"github.com/Minecrell/SpongeDownloads/downloads/indexer"
 	"github.com/Minecrell/SpongeDownloads/downloads/maven"
+	"github.com/Minecrell/SpongeDownloads/downloads/repo"
 	"github.com/go-macaron/auth"
 	"gopkg.in/macaron.v1"
 	"log"
@@ -15,7 +16,7 @@ import (
 )
 
 func main() {
-	repo := requireEnv("MAVEN_REPO")
+	mavenRepo := requireEnv("MAVEN_REPO")
 	user := requireEnv("MAVEN_USER")
 	password := requireEnv("MAVEN_PASSWORD")
 
@@ -24,12 +25,12 @@ func main() {
 	ftpPassword := requireEnv("FTP_PASSWORD")
 
 	// Make sure target ends with a slash
-	if repo[len(repo)-1] != '/' {
-		repo += "/"
+	if mavenRepo[len(mavenRepo)-1] != '/' {
+		mavenRepo += "/"
 	}
 
 	postgresUrl := requireEnv("POSTGRES_URL")
-	/*repoStorage := */ requireEnv("REPO_STORAGE")
+	repoStorage := requireEnv("REPO_STORAGE")
 
 	// Connect to database
 	postgresDB, err := db.ConnectPostgres(postgresUrl)
@@ -43,7 +44,15 @@ func main() {
 		log.Fatalln(err)
 	}*/
 
-	manager := &downloads.Manager{repo, postgresDB}
+	manager := &downloads.Manager{Repo: mavenRepo, DB: postgresDB}
+
+	// Initialize repo manager
+	repo, err := repo.Create(manager.CreateLogger("Git"), repoStorage)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	manager.Git = repo
 
 	// Setup FTP uploader (does not connect to the FTP server yet)
 	ftpUploader, err := maven.CreateFTPUploader(ftpHost, ftpUser, ftpPassword)
@@ -56,7 +65,7 @@ func main() {
 	api := api.Create(manager)
 
 	// Initialize Maven proxy
-	proxy := &maven.Proxy{Repo: repo, Uploader: []maven.Uploader{indexer, ftpUploader}}
+	proxy := &maven.Proxy{Repo: mavenRepo, Uploader: []maven.Uploader{indexer, ftpUploader}}
 
 	// Initialize web framework
 	m := macaron.New()

@@ -77,8 +77,8 @@ func addProjects(db *sql.DB) (err error) {
 		'net.minecrell',
 		'maventest',
 		'MavenTest',
-		'Minecrell',
-		'maventest'
+		'SpongePowered',
+		'SpongeVanilla'
 	);`)
 
 	return
