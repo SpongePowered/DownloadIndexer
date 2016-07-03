@@ -80,17 +80,6 @@ func (m *Manager) initRepo(url string) (*git.Repository, error) {
 	return git.Clone(url, dir, &git.CloneOptions{Bare: true})
 }
 
-func updateSubmodules(r *git.Repository) error {
-	return r.Submodules.Foreach(func(sub *git.Submodule, name string) int {
-		err := sub.Update(true, &git.SubmoduleUpdateOptions{FetchOptions: &git.FetchOptions{Prune: git.FetchPruneOn}})
-		if err != nil {
-			log.Println(err)
-		}
-
-		return 0
-	})
-}
-
 func (r *Repository) FetchCommit(ref string) (err error) {
 	oid, err := git.NewOid(ref)
 	if err != nil {
