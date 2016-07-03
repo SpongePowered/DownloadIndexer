@@ -1,8 +1,26 @@
 package repo
 
-import "strings"
+import (
+	"github.com/libgit2/git2go"
+	"strings"
+)
 
-func (m *Manager) readSubmodules(data []byte) map[string]string {
+func (r *Repository) readSubmodules(tree *git.Tree) (result map[string]string, err error) {
+	e, err := tree.EntryByPath(".gitmodules")
+	if err != nil {
+		return nil, nil
+	}
+
+	blob, err := r.repo.LookupBlob(e.Id)
+	if err != nil {
+		return
+	}
+
+	result = r.readGitModules(blob.Contents())
+	return
+}
+
+func (m *Manager) readGitModules(data []byte) map[string]string {
 	result := make(map[string]string)
 
 	skip := false

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"github.com/Minecrell/SpongeDownloads/downloads"
 	"github.com/Minecrell/SpongeDownloads/downloads/maven"
+	"github.com/Minecrell/SpongeDownloads/downloads/repo"
 	"gopkg.in/macaron.v1"
 	"net/http"
 	"strconv"
@@ -20,8 +21,10 @@ type download struct {
 	Commit          string    `json:"commit"`
 	Label           string    `json:"label,omitempty"`
 	Published       time.Time `json:"published"`
+	parentCommit    string
 
-	Artifacts []*artifact `json:"artifacts"`
+	Artifacts []*artifact    `json:"artifacts"`
+	Changelog []*repo.Commit `json:"changelog,omitempty"`
 }
 
 type artifact struct {
@@ -35,9 +38,10 @@ type artifact struct {
 
 func (a *API) GetDownloads(ctx *macaron.Context, project maven.Coordinates) error {
 	var projectID uint
+	var githubOwner, githubRepo string
 
-	row := a.DB.QueryRow("SELECT id FROM projects WHERE group_id = $1 AND artifact_id = $2;", project.GroupID, project.ArtifactID)
-	err := row.Scan(&projectID)
+	row := a.DB.QueryRow("SELECT id, github_owner, github_repo FROM projects WHERE group_id = $1 AND artifact_id = $2;", project.GroupID, project.ArtifactID)
+	err := row.Scan(&projectID, &githubOwner, &githubRepo)
 	if err != nil {
 		return downloads.InternalError("Database error (failed to lookup project)", err)
 	}
@@ -57,7 +61,7 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Coordinates) erro
 	args[0] = projectID
 
 	buffer := bytes.NewBufferString("SELECT downloads.id, downloads.version, downloads.snapshot_version, branches.type, downloads.minecraft, " +
-		"downloads.commit, downloads.label, downloads.published " +
+		"downloads.commit, downloads.label, downloads.published, downloads.parent_commit " +
 		"FROM downloads LEFT OUTER JOIN branches ON (downloads.branch_id = branches.id) " +
 		"WHERE downloads.project_id = $1")
 
@@ -107,13 +111,15 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Coordinates) erro
 		var id int
 		var dl download
 		var label sql.NullString
+		var parentCommit sql.NullString
 
-		err = rows.Scan(&id, &dl.Version, &dl.SnapshotVersion, &dl.Type, &dl.Minecraft, &dl.Commit, &label, &dl.Published)
+		err = rows.Scan(&id, &dl.Version, &dl.SnapshotVersion, &dl.Type, &dl.Minecraft, &dl.Commit, &label, &dl.Published, &parentCommit)
 		if err != nil {
 			return downloads.InternalError("Database error (failed to read downloads)", err)
 		}
 
 		dl.Label = label.String
+		dl.parentCommit = parentCommit.String
 
 		if first {
 			first = false
@@ -161,7 +167,20 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Coordinates) erro
 	}
 
 	if changelog {
-
+		repo, err := a.Git.OpenGitHub(githubOwner, githubRepo)
+		if err == nil {
+			defer repo.Close()
+			for _, dl := range downloadsSlice {
+				if dl.parentCommit != "" {
+					dl.Changelog, err = repo.GenerateChangelog(dl.Commit, dl.parentCommit)
+					if err != nil {
+						a.Log.Println("Failed to generate changelog for ", dl.Commit, err)
+					}
+				}
+			}
+		} else {
+			a.Log.Println("Failed to open repository", err)
+		}
 	}
 
 	ctx.JSON(http.StatusOK, downloadsSlice)

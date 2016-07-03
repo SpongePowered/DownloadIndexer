@@ -10,6 +10,8 @@ import (
 	"sync"
 )
 
+var nothing = struct{}{} // This is nothing!
+
 type Manager struct {
 	Log        *log.Logger
 	StorageDir string
@@ -20,8 +22,11 @@ type Manager struct {
 
 type Repository struct {
 	*Manager
-	lock sync.Mutex
-	repo *git.Repository
+	url string
+
+	lock          sync.Mutex
+	repo          *git.Repository
+	failedCommits map[string]struct{}
 }
 
 func Create(log *log.Logger, dir string) (*Manager, error) {
@@ -51,7 +56,7 @@ func (m *Manager) Open(url string) (*Repository, error) {
 			return nil, err
 		}
 
-		result = &Repository{Manager: m, repo: repo}
+		result = &Repository{Manager: m, url: url, repo: repo, failedCommits: make(map[string]struct{})}
 		m.repos[url] = result
 	}
 
@@ -80,6 +85,33 @@ func (m *Manager) initRepo(url string) (*git.Repository, error) {
 	return git.Clone(url, dir, &git.CloneOptions{Bare: true})
 }
 
+func (r *Repository) fetchIfNotFound(err error) error {
+	// Look closer at the error
+	gitError, ok := err.(*git.GitError)
+	if !ok {
+		return err
+	}
+
+	if gitError.Code == git.ErrNotFound {
+		// Try to fetch the commit
+		err = r.fetch()
+	}
+
+	return err
+}
+
+func (r *Repository) fetch() (err error) {
+	r.Log.Println("Fetching commits from ", r.url)
+
+	remote, err := r.repo.Remotes.Lookup("origin")
+	if err != nil {
+		return
+	}
+
+	return remote.Fetch([]string{}, &git.FetchOptions{Prune: git.FetchPruneOn}, "")
+}
+
+/* Weird old code!
 func (r *Repository) FetchCommit(ref string) (err error) {
 	oid, err := git.NewOid(ref)
 	if err != nil {
@@ -154,7 +186,7 @@ func (r *Repository) fetchCommit(oid *git.Oid) (err error) {
 
 	err = nil
 	return
-}
+}*/
 
 func (r *Repository) Close() {
 	r.lock.Unlock()

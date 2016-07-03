@@ -39,10 +39,10 @@ func main() {
 	}
 
 	// TODO
-	/*err = db.Reset(postgresDB)
+	err = db.Reset(postgresDB)
 	if err != nil {
 		log.Fatalln(err)
-	}*/
+	}
 
 	manager := &downloads.Manager{Repo: mavenRepo, DB: postgresDB}
 
@@ -76,7 +76,7 @@ func main() {
 
 		m.Map(downloads.ErrorHandler(api.Log))
 
-		m.Use(macaron.Renderer())
+		m.Use(macaron.Renderer(macaron.RenderOptions{IndentJSON: true}))
 
 		m.Get("/", api.GetProjects)
 		m.Get("/*", func(ctx *macaron.Context) error {
