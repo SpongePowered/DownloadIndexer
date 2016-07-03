@@ -3,6 +3,7 @@ package repo
 import (
 	"github.com/libgit2/git2go"
 	"time"
+	"strings"
 )
 
 type Commit struct {
@@ -86,7 +87,7 @@ func (r *Repository) prepareCommit(commit *git.Commit) (result *Commit, err erro
 		ID:      commit.Id().String(),
 		Author:  author.Name,
 		Date:    author.When,
-		Message: commit.Message(),
+		Message: strings.TrimSpace(commit.Message()),
 	}
 
 	tree, err := commit.Tree()
