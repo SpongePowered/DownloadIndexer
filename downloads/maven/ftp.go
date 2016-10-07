@@ -1,51 +1,86 @@
 package maven
 
 import (
-	"bytes"
 	"github.com/Minecrell/SpongeDownloads/downloads"
 	"github.com/secsy/goftp"
-	"strings"
+	"io"
+	"net/http"
+	"net/url"
 )
 
-func CreateFTPUploader(host string, user, password string) (Uploader, error) {
-	client, err := goftp.DialConfig(goftp.Config{User: user, Password: password}, host)
+// Expose Timeout() method of goftp.Error via interface
+type ftpError interface {
+	goftp.Error
+	Timeout() bool
+}
+
+func createFTP(url *url.URL) (*ftpRepository, error) {
+	if url.Path != "" && url.Path[len(url.Path)-1] != '/' {
+		url.Path += "/"
+	}
+
+	var config goftp.Config
+
+	if url.User != nil {
+		config.User = url.User.Username()
+		config.Password, _ = url.User.Password()
+	}
+
+	client, err := goftp.DialConfig(config, url.Host)
 	if err != nil {
 		return nil, err
 	}
-	return &ftpUploader{client}, nil
+
+	return &ftpRepository{client, url.Path}, nil
 }
 
-type ftpUploader struct {
-	client *goftp.Client
+type ftpRepository struct {
+	ftp      *goftp.Client
+	basePath string
 }
 
-func (ftp *ftpUploader) Upload(path string, data []byte) error {
-	for _, dir := range splitPath(path) {
-		// Ignore errors since the directories may already exist
-		ftp.client.Mkdir(dir)
+func (repo *ftpRepository) Download(path string, writer io.Writer) error {
+	path = repo.basePath + path
+
+	err := repo.ftp.Retrieve(path, writer)
+	if err == nil {
+		return nil
 	}
 
-	err := ftp.client.Store(path, bytes.NewReader(data))
-	if err != nil {
-		return downloads.BadGateway("Failed to upload upstream file", err)
-	}
+	code := http.StatusBadGateway
 
-	return nil
-}
-
-func splitPath(path string) []string {
-	n := strings.Count(path, "/")
-	result := make([]string, n)
-
-	pos := 0
-	for i := 0; i < n; i++ {
-		for path[pos] != '/' {
-			pos++
+	if ftpErr, ok := err.(ftpError); ok {
+		switch {
+		case ftpErr.Code() == 550:
+			code = http.StatusNotFound
+		case ftpErr.Timeout():
+			code = http.StatusGatewayTimeout
+		case ftpErr.Temporary():
+			code = http.StatusServiceUnavailable
 		}
-
-		result[i] = path[0:pos]
-		pos++
 	}
 
-	return result
+	return downloads.Error(code, "Failed to download file", err)
+}
+
+func (repo *ftpRepository) Upload(path string, reader io.Reader) error {
+	path = repo.basePath + path
+
+	repo.createPath(path)
+
+	err := repo.ftp.Store(path, reader)
+	if err == nil {
+		return nil
+	}
+
+	return downloads.Error(http.StatusBadGateway, "Failed to upload file", err)
+}
+
+func (ftp *ftpRepository) createPath(path string) {
+	for i, c := range path {
+		if c == '/' {
+			// Ignore errors since the directories may already exist
+			ftp.ftp.Mkdir(path[:i])
+		}
+	}
 }

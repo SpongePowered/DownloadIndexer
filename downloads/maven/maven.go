@@ -1,6 +1,6 @@
 package maven
 
-type Coordinates struct {
+type Identifier struct {
 	GroupID    string `json:"groupId"`
 	ArtifactID string `json:"artifactId"`
 }

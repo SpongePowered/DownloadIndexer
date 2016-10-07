@@ -11,7 +11,7 @@ import (
 )
 
 type project struct {
-	maven.Coordinates
+	maven.Identifier
 	Name   string `json:"name"`
 	GitHub struct {
 		Owner string `json:"owner"`
@@ -41,9 +41,9 @@ func (a *API) GetProjects(ctx *macaron.Context) error {
 
 	defer rows.Close()
 
-	var result []maven.Coordinates
+	var result []maven.Identifier
 	for rows.Next() {
-		var coordinates maven.Coordinates
+		var coordinates maven.Identifier
 		err = rows.Scan(&coordinates.GroupID, &coordinates.ArtifactID)
 		if err != nil {
 			return downloads.InternalError("Database error (failed to read project)", err)
@@ -56,7 +56,7 @@ func (a *API) GetProjects(ctx *macaron.Context) error {
 	return nil
 }
 
-func (a *API) GetProject(ctx *macaron.Context, c maven.Coordinates) error {
+func (a *API) GetProject(ctx *macaron.Context, c maven.Identifier) error {
 	var p project
 	var projectID uint
 

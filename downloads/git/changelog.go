@@ -1,9 +1,9 @@
-package repo
+package git
 
 import (
 	"github.com/libgit2/git2go"
-	"time"
 	"strings"
+	"time"
 )
 
 type Commit struct {

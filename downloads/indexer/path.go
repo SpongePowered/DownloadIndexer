@@ -2,11 +2,50 @@ package indexer
 
 import (
 	"errors"
-	"github.com/Minecrell/SpongeDownloads/downloads/db"
+	"github.com/Minecrell/SpongeDownloads/downloads/maven"
 	"strings"
 )
 
-func parsePath(path string) (v version, a artifactType, err error) {
+type fileType int
+
+const (
+	mavenMetadataFile = "maven-metadata.xml"
+	md5Extension      = ".md5"
+	sha1Extension     = ".sha1"
+
+	snapshotSuffix = "-SNAPSHOT"
+
+	file fileType = iota
+	md5File
+	sha1File
+)
+
+type path struct {
+	maven.Identifier
+	t fileType
+
+	metadata bool
+
+	version         string
+	snapshotVersion string
+
+	artifact artifactType
+}
+
+func parsePath(path string, parseArtifact bool) (p path, err error) {
+	switch {
+	case strings.HasSuffix(path, md5Extension):
+		p.t = md5File
+		// Strip .md5 from path for further processing
+		path = path[:len(path)-len(md5Extension)]
+	case strings.HasSuffix(path, sha1Extension):
+		p.t = sha1File
+		// Strip .sha1 from path for further processing
+		path = path[:len(path)-len(sha1Extension)]
+	default:
+		p.t = file
+	}
+
 	pos := len(path)
 
 	filename, err := findPathSegment(path, &pos)
@@ -14,61 +53,70 @@ func parsePath(path string) (v version, a artifactType, err error) {
 		return
 	}
 
-	v.version, err = findPathSegment(path, &pos)
+	next, err := findPathSegment(path, &pos)
 	if err != nil {
 		return
 	}
 
-	v.artifactID, err = findPathSegment(path, &pos)
-	if err != nil {
-		return
+	p.metadata = filename == mavenMetadataFile
+
+	if !p.metadata || strings.HasSuffix(next, snapshotSuffix) {
+		p.version = next
+		next, err = findPathSegment(path, &pos)
+		if err != nil {
+			return
+		}
 	}
 
-	v.groupID = strings.Replace(path[:pos], "/", ".", -1)
+	p.ArtifactID = next
+	p.GroupID = strings.Replace(path[:pos], "/", ".", -1)
 
-	if !strings.HasPrefix(filename, v.artifactID) || filename[len(v.artifactID)] != '-' {
-		err = errors.New("Invalid filename (missing artifact ID): " + filename)
-		return
-	}
-
-	filename = filename[len(v.artifactID)+1:]
-
-	if strings.HasSuffix(v.version, "-SNAPSHOT") {
-		// Special handling for snapshots, string should start with the version, without SNAPSHOT
-		l := len(v.version) - 8
-
-		if !strings.HasPrefix(filename, v.version[:l]) {
-			err = errors.New("Invalid filename (missing version): " + filename)
+	if parseArtifact && !p.metadata {
+		if !strings.HasPrefix(filename, p.ArtifactID) || filename[len(p.ArtifactID)] != '-' {
+			err = errors.New("Invalid filename (missing artifact ID): " + filename)
 			return
 		}
 
-		// Find end of snapshot version, starting with the version prefix
-		// + 16 for the datetime
-		end := findNonNumeric(filename, l+16)
-		v.snapshotVersion = db.ToNullString(filename[:end])
+		filename = filename[len(p.ArtifactID)+1:]
 
-		filename = filename[end:]
-	} else {
-		if !strings.HasPrefix(filename, v.version) {
-			err = errors.New("Invalid filename (missing version): " + filename)
+		if strings.HasSuffix(p.version, snapshotSuffix) {
+			// Special handling for snapshots, string should start with the version, without SNAPSHOT
+			l := len(p.version) - len(snapshotSuffix) + 1
+
+			if !strings.HasPrefix(filename, p.version[:l]) {
+				err = errors.New("Invalid filename (missing version): " + filename)
+				return
+			}
+
+			// Find end of snapshot version, starting with the version prefix
+			// + 16 for the datetime
+			end := findNonNumeric(filename, l+16)
+			p.snapshotVersion = filename[:end]
+
+			filename = filename[end:]
+		} else {
+			if !strings.HasPrefix(filename, p.version) {
+				err = errors.New("Invalid filename (missing version): " + filename)
+				return
+			}
+
+			filename = filename[len(p.version):]
+		}
+
+		if filename[0] == '-' {
+			// Classifier, find end
+			end := strings.LastIndexByte(filename, '.')
+			p.artifact.classifier = filename[1:end]
+
+			filename = filename[end:]
+		} else if filename[0] != '.' {
+			err = errors.New("Invalid filename (invalid version): " + filename)
 			return
 		}
 
-		filename = filename[len(v.version):]
+		p.artifact.extension = filename[1:]
 	}
 
-	if filename[0] == '-' {
-		// Classifier, find end
-		end := strings.LastIndexByte(filename, '.')
-		a.classifier = db.ToNullString(filename[1:end])
-
-		filename = filename[end:]
-	} else if filename[0] != '.' {
-		err = errors.New("Invalid filename (invalid version): " + filename)
-		return
-	}
-
-	a.extension = filename[1:]
 	return
 }
 
@@ -93,4 +141,12 @@ func findPathSegment(s string, pos *int) (result string, err error) {
 
 	err = errors.New("No path segment found in " + result)
 	return
+}
+
+func substringBefore(s string, c byte) (string, bool) {
+	i := strings.IndexByte(s, c)
+	if i == -1 {
+		return s, false
+	}
+	return s[:i], true
 }

@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"database/sql"
 	"github.com/Minecrell/SpongeDownloads/downloads"
+	"github.com/Minecrell/SpongeDownloads/downloads/git"
 	"github.com/Minecrell/SpongeDownloads/downloads/maven"
-	"github.com/Minecrell/SpongeDownloads/downloads/repo"
 	"gopkg.in/macaron.v1"
 	"net/http"
 	"strconv"
@@ -23,8 +23,8 @@ type download struct {
 	Published       time.Time `json:"published"`
 	parentCommit    string
 
-	Artifacts []*artifact    `json:"artifacts"`
-	Changelog []*repo.Commit `json:"changelog,omitempty"`
+	Artifacts []*artifact   `json:"artifacts"`
+	Changelog []*git.Commit `json:"changelog,omitempty"`
 }
 
 type artifact struct {
@@ -36,7 +36,7 @@ type artifact struct {
 	MD5        string  `json:"md5,omitempty"`
 }
 
-func (a *API) GetDownloads(ctx *macaron.Context, project maven.Coordinates) error {
+func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error {
 	var projectID uint
 	var githubOwner, githubRepo string
 
@@ -167,7 +167,7 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Coordinates) erro
 	}
 
 	if changelog {
-		repo, err := a.Git.OpenGitHub(githubOwner, githubRepo)
+		/*repo, err := a.Git.OpenGitHub(githubOwner, githubRepo)
 		if err == nil {
 			defer repo.Close()
 			for _, dl := range downloadsSlice {
@@ -180,7 +180,7 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Coordinates) erro
 			}
 		} else {
 			a.Log.Println("Failed to open repository", err)
-		}
+		}*/
 	}
 
 	ctx.JSON(http.StatusOK, downloadsSlice)

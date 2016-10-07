@@ -1,10 +1,10 @@
-package repo
+package git
 
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"github.com/Minecrell/SpongeDownloads/downloads"
 	"github.com/libgit2/git2go"
-	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -13,7 +13,7 @@ import (
 var nothing = struct{}{} // This is nothing!
 
 type Manager struct {
-	Log        *log.Logger
+	*downloads.Service
 	StorageDir string
 
 	repos     map[string]*Repository
@@ -29,13 +29,13 @@ type Repository struct {
 	failedCommits map[string]struct{}
 }
 
-func Create(log *log.Logger, dir string) (*Manager, error) {
+func Create(manager *downloads.Manager, dir string) (*Manager, error) {
 	err := os.MkdirAll(dir, os.ModePerm)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Manager{Log: log, StorageDir: dir, repos: make(map[string]*Repository)}, nil
+	return &Manager{Service: manager.Service("Git"), StorageDir: dir, repos: make(map[string]*Repository)}, nil
 }
 
 func (m *Manager) OpenGitHub(owner, repo string) (*Repository, error) {

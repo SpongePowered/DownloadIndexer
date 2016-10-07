@@ -2,16 +2,12 @@ package downloads
 
 import (
 	"database/sql"
-	"github.com/Minecrell/SpongeDownloads/downloads/repo"
 	"log"
 	"os"
 )
 
 type Manager struct {
-	Repo string
-	DB   *sql.DB
-
-	Git *repo.Manager
+	DB *sql.DB
 }
 
 func (m *Manager) CreateLogger(name string) *log.Logger {

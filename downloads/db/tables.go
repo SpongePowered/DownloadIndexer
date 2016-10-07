@@ -5,7 +5,7 @@ import "database/sql"
 func createTables(db *sql.DB) (err error) {
 	_, err = db.Exec(
 		`CREATE TABLE projects (
-			id smallserial primary key,
+			id serial primary key,
 			group_id text not null,
 			artifact_id text not null,
 			name text not null,
@@ -22,8 +22,8 @@ func createTables(db *sql.DB) (err error) {
 
 	_, err = db.Exec(
 		`CREATE TABLE branches (
-			id smallserial primary key,
-			project_id smallint references projects(id) not null,
+			id serial primary key,
+			project_id int references projects(id) not null,
 			name text not null,
 			type text not null,
 			main boolean not null,
@@ -39,15 +39,15 @@ func createTables(db *sql.DB) (err error) {
 	_, err = db.Exec(
 		`CREATE TABLE downloads (
 			id serial primary key,
-			project_id smallint references projects(id) not null,
-			branch_id smallint references branches(id) not null,
+			project_id int references projects(id) not null,
+			branch_id int references branches(id) not null,
 			version text not null,
 			snapshot_version text,
 			published timestamp(0) with time zone not null,
 			commit char(40) not null,
 			minecraft text,
 			label text,
-			parent_commit char(40),
+			changelog jsonb,
 			UNIQUE(branch_id, published)
 		);`,
 	)
@@ -63,8 +63,8 @@ func createTables(db *sql.DB) (err error) {
 			classifier text,
 			extension text not null,
 			size int not null,
-			sha1 char(40),
-			md5 char(32)
+			sha1 char(40) not null,
+			md5 char(32) not null
 		);`,
 	)
 
