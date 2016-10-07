@@ -72,7 +72,7 @@ func (s *session) createDownload(i *Indexer, snapshotVersion string, mainJar []b
 	if parentCommit.Valid {
 		changelog, err = i.generateChangelog(s.project, commit, parentCommit.String)
 		if err != nil {
-			return downloads.InternalError("Git error (failed to fetch commit)", err)
+			return err
 		}
 	}
 
