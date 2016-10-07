@@ -306,13 +306,19 @@ func (i *Indexer) ErrorHandler(ctx *macaron.Context) {
 	}
 }
 
+func (i *Indexer) getSession(id string) *session {
+	i.sessionLock.RLock()
+	defer i.sessionLock.RUnlock()
+	return i.sessions[id]
+}
+
 func (i *Indexer) requireSession(ctx *macaron.Context, project *project, version string) (*session, error) {
-	sessionID := ctx.GetCookie(sessionCookieName)
-	if sessionID == "" {
+	id := ctx.GetCookie(sessionCookieName)
+	if id == "" {
 		return nil, downloads.Forbidden("Missing session")
 	}
 
-	s := i.sessions[sessionID]
+	s := i.getSession(id)
 	if s == nil {
 		return nil, downloads.Forbidden("Unknown session")
 	}
@@ -346,10 +352,12 @@ func (i *Indexer) getOrCreateSession(ctx *macaron.Context, project *project, ver
 
 	s.lock(ctx)
 
-	i.sessions[sessionID] = s
-
 	// Start goroutine which will delete the session after timeout
 	go s.delete(i)
+
+	i.sessionLock.Lock()
+	defer i.sessionLock.Unlock()
+	i.sessions[sessionID] = s
 
 	return s, nil
 }
