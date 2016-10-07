@@ -145,6 +145,10 @@ func (i *Indexer) Get(ctx *macaron.Context) error {
 
 	defer s.unlock()
 
+	if s.failed {
+		return downloads.Error(http.StatusFailedDependency, "Previous request failed", nil)
+	}
+
 	if p.t == file && meta.session != s.id {
 		meta.lock.Lock()
 		meta.session = s.id
