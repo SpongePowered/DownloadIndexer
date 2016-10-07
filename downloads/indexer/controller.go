@@ -215,7 +215,7 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 		// Process artifact
 		switch p.t {
 		case file:
-			if a != nil && a.uploaded {
+			if a.uploaded {
 				return downloads.Error(http.StatusConflict, "Artifact already uploaded", nil)
 			}
 
