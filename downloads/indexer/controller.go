@@ -45,6 +45,9 @@ type metadata struct {
 type project struct {
 	id uint
 
+	githubOwner string
+	githubRepo  string
+
 	metadata            *metadata
 	versionMetadata     map[string]*metadata
 	versionMetadataLock sync.RWMutex
@@ -87,7 +90,7 @@ func Create(m *downloads.Manager, repo maven.Repository, git *git.Manager) *Inde
 }
 
 func (i *Indexer) LoadProjects() error {
-	rows, err := i.DB.Query("SELECT id, group_id, artifact_id FROM projects;")
+	rows, err := i.DB.Query("SELECT id, group_id, artifact_id, github_owner, github_repo FROM projects;")
 	if err != nil {
 		return err
 	}
@@ -96,7 +99,8 @@ func (i *Indexer) LoadProjects() error {
 		var identifier maven.Identifier
 		project := &project{metadata: new(metadata), versionMetadata: make(map[string]*metadata)}
 
-		err = rows.Scan(&project.id, &identifier.GroupID, &identifier.ArtifactID)
+		err = rows.Scan(&project.id, &identifier.GroupID, &identifier.ArtifactID,
+			&project.githubOwner, &project.githubRepo)
 		if err != nil {
 			return err
 		}

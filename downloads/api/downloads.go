@@ -3,8 +3,8 @@ package api
 import (
 	"bytes"
 	"database/sql"
+	"encoding/json"
 	"github.com/Minecrell/SpongeDownloads/downloads"
-	"github.com/Minecrell/SpongeDownloads/downloads/git"
 	"github.com/Minecrell/SpongeDownloads/downloads/maven"
 	"gopkg.in/macaron.v1"
 	"net/http"
@@ -23,25 +23,24 @@ type download struct {
 	Published       time.Time `json:"published"`
 	parentCommit    string
 
-	Artifacts []*artifact   `json:"artifacts"`
-	Changelog []*git.Commit `json:"changelog,omitempty"`
+	Artifacts []*artifact     `json:"artifacts"`
+	Changelog json.RawMessage `json:"changelog,omitempty"`
 }
 
 type artifact struct {
-	Classifier *string `json:"classifier,omitempty"`
-	Extension  string  `json:"extension"`
-	URL        string  `json:"url"`
-	Size       int     `json:"size"`
-	SHA1       string  `json:"sha1,omitempty"`
-	MD5        string  `json:"md5,omitempty"`
+	Classifier string `json:"classifier,omitempty"`
+	Extension  string `json:"extension"`
+	URL        string `json:"url"`
+	Size       int    `json:"size"`
+	SHA1       string `json:"sha1,omitempty"`
+	MD5        string `json:"md5,omitempty"`
 }
 
 func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error {
 	var projectID uint
-	var githubOwner, githubRepo string
 
-	row := a.DB.QueryRow("SELECT id, github_owner, github_repo FROM projects WHERE group_id = $1 AND artifact_id = $2;", project.GroupID, project.ArtifactID)
-	err := row.Scan(&projectID, &githubOwner, &githubRepo)
+	row := a.DB.QueryRow("SELECT id FROM projects WHERE group_id = $1 AND artifact_id = $2;", project.GroupID, project.ArtifactID)
+	err := row.Scan(&projectID)
 	if err != nil {
 		return downloads.InternalError("Database error (failed to lookup project)", err)
 	}
@@ -61,8 +60,13 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error
 	args[0] = projectID
 
 	buffer := bytes.NewBufferString("SELECT downloads.id, downloads.version, downloads.snapshot_version, branches.type, downloads.minecraft, " +
-		"downloads.commit, downloads.label, downloads.published, downloads.parent_commit " +
-		"FROM downloads LEFT OUTER JOIN branches ON (downloads.branch_id = branches.id) " +
+		"downloads.commit, downloads.label, downloads.published")
+
+	if changelog {
+		buffer.WriteString(", downloads.changelog")
+	}
+
+	buffer.WriteString(" FROM downloads LEFT OUTER JOIN branches ON (downloads.branch_id = branches.id) " +
 		"WHERE downloads.project_id = $1")
 
 	var i byte
@@ -111,15 +115,22 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error
 		var id int
 		var dl download
 		var label sql.NullString
-		var parentCommit sql.NullString
+		var changelogJSON []byte
 
-		err = rows.Scan(&id, &dl.Version, &dl.SnapshotVersion, &dl.Type, &dl.Minecraft, &dl.Commit, &label, &dl.Published, &parentCommit)
+		if changelog {
+			err = rows.Scan(&id, &dl.Version, &dl.SnapshotVersion, &dl.Type, &dl.Minecraft, &dl.Commit, &label,
+				&dl.Published, &changelogJSON)
+		} else {
+			err = rows.Scan(&id, &dl.Version, &dl.SnapshotVersion, &dl.Type, &dl.Minecraft, &dl.Commit, &label,
+				&dl.Published)
+		}
+
 		if err != nil {
 			return downloads.InternalError("Database error (failed to read downloads)", err)
 		}
 
 		dl.Label = label.String
-		dl.parentCommit = parentCommit.String
+		dl.Changelog = json.RawMessage(changelogJSON)
 
 		if first {
 			first = false
@@ -157,30 +168,13 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error
 
 		artifact.URL = urlPrefix + dl.Version + "/" + project.ArtifactID + "-" + nilFallback(dl.SnapshotVersion, dl.Version)
 
-		if artifact.Classifier != nil {
-			artifact.URL += "-" + *artifact.Classifier
+		if artifact.Classifier != "" {
+			artifact.URL += "-" + artifact.Classifier
 		}
 
 		artifact.URL += "." + artifact.Extension
 
 		dl.Artifacts = append(dl.Artifacts, &artifact)
-	}
-
-	if changelog {
-		/*repo, err := a.Git.OpenGitHub(githubOwner, githubRepo)
-		if err == nil {
-			defer repo.Close()
-			for _, dl := range downloadsSlice {
-				if dl.parentCommit != "" {
-					dl.Changelog, err = repo.GenerateChangelog(dl.Commit, dl.parentCommit)
-					if err != nil {
-						a.Log.Println("Failed to generate changelog for ", dl.Commit, err)
-					}
-				}
-			}
-		} else {
-			a.Log.Println("Failed to open repository", err)
-		}*/
 	}
 
 	ctx.JSON(http.StatusOK, downloadsSlice)

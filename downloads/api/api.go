@@ -8,5 +8,10 @@ type API struct {
 }
 
 func Create(m *downloads.Manager, repo string) *API {
+	// Make sure repo URL ends with a slash
+	if repo[len(repo)-1] != '/' {
+		repo += "/"
+	}
+
 	return &API{m.Service("API"), repo}
 }

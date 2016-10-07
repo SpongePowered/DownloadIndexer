@@ -64,11 +64,10 @@ func main() {
 	m := macaron.New()
 	m.Use(macaron.Logger())
 
-	m.Group("/api/v1", func() {
-		m.Use(macaron.Recovery())
-		m.Map(downloads.ErrorHandler(api.Log))
+	renderer := macaron.Renderer(macaron.RenderOptions{IndentJSON: true})
 
-		m.Use(macaron.Renderer(macaron.RenderOptions{IndentJSON: true}))
+	m.Group("/api/v1", func() {
+		m.Map(downloads.ErrorHandler(api.Log))
 
 		m.Get("/", api.GetProjects)
 		m.Get("/*", func(ctx *macaron.Context) error {
@@ -90,18 +89,20 @@ func main() {
 
 			return handler(ctx, maven.Identifier{strings.Join(parts[:i], "."), parts[i]})
 		})
-	})
+	},
+		macaron.Recovery(),
+		renderer)
 
 	m.Group("/maven/upload", func() {
-		m.Use(indexer.ErrorHandler)
-		m.Use(macaron.Recovery())
-
 		m.Map(downloads.ErrorHandler(indexer.Log))
-		m.Use(auth.Basic(user, password))
 
 		m.Get("/*", indexer.Get)
 		m.Put("/*", indexer.Put)
-	})
+	},
+		indexer.ErrorHandler,
+		macaron.Recovery(),
+		auth.Basic(user, password),
+		renderer)
 
 	m.Run()
 }

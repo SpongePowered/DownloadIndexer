@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"github.com/Minecrell/SpongeDownloads/downloads"
 	"github.com/Minecrell/SpongeDownloads/downloads/db"
 	"time"
@@ -34,20 +35,6 @@ func (s *session) createDownload(i *Indexer, snapshotVersion string, mainJar []b
 	if minecraft == "" {
 		return downloads.BadRequest("Missing Minecraft-Version in manifest", err)
 	}
-
-	// TODO: Re-enable this? Currently only fetched directly in API call
-	/*// Fetch commit
-		repo, err := i.Git.OpenGitHub(d.githubOwner, d.githubRepo)
-	if err != nil {
-		return downloads.InternalError("Git error (failed to open repository)", err)
-	}
-
-	err = repo.FetchCommit(commit)
-	repo.Close()
-
-	if err != nil {
-		return downloads.InternalError("Git error (failed to fetch commit)", err)
-	}*/
 
 	// Start transaction
 	s.tx, err = i.DB.Begin()
@@ -81,14 +68,45 @@ func (s *session) createDownload(i *Indexer, snapshotVersion string, mainJar []b
 		}
 	}
 
-	row = s.tx.QueryRow("INSERT INTO downloads VALUES (DEFAULT, $1, $2, $3, $4, $5, $6, $7, NULL, NULL) RETURNING id;",
-		s.project.id, branchID, s.version, db.ToNullString(snapshotVersion), time.Now(), commit, minecraft)
+	var changelog string
+	if parentCommit.Valid {
+		changelog, err = i.generateChangelog(s.project, commit, parentCommit.String)
+		if err != nil {
+			return downloads.InternalError("Git error (failed to fetch commit)", err)
+		}
+	}
+
+	row = s.tx.QueryRow("INSERT INTO downloads VALUES (DEFAULT, $1, $2, $3, $4, $5, $6, $7, NULL, $8) RETURNING id;",
+		s.project.id, branchID, s.version, db.ToNullString(snapshotVersion), time.Now(), commit, minecraft,
+		db.ToNullString(changelog))
 	err = row.Scan(&s.downloadID)
 	if err != nil {
 		return downloads.InternalError("Database error (failed to add download)", err)
 	}
 
 	return nil
+}
+
+func (i *Indexer) generateChangelog(p *project, commit string, parentCommit string) (string, error) {
+	// Generate changelog
+	repo, err := i.git.OpenGitHub(p.githubOwner, p.githubRepo)
+	if err != nil {
+		return "", downloads.InternalError("Git error (failed to open repository)", err)
+	}
+
+	defer repo.Close()
+
+	changelog, err := repo.GenerateChangelog(commit, parentCommit)
+	if err != nil {
+		return "", downloads.InternalError("Git error (failed to generate changelog)", err)
+	}
+
+	json, err := json.Marshal(changelog)
+	if err != nil {
+		return "", downloads.InternalError("Git error (failed to serialize changelog)", err)
+	}
+
+	return string(json), nil
 }
 
 func (a *artifact) create(s *session, t artifactType, data []byte, upload bool) (err error) {
