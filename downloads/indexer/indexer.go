@@ -123,8 +123,10 @@ func (a *artifact) create(s *session, t artifactType, data []byte, upload bool) 
 func (a *artifact) setOrVerifyMD5(md5Sum string) error {
 	if a.md5 == "" {
 		a.md5 = md5Sum
-	} else if a.md5 != md5Sum {
-		return downloads.BadRequest("MD5 checksum mismatch: "+a.md5+" != "+md5Sum, nil)
+	} else {
+		if a.md5 != md5Sum {
+			return downloads.BadRequest("MD5 checksum mismatch: "+a.md5+" != "+md5Sum, nil)
+		}
 	}
 
 	return nil

@@ -32,6 +32,11 @@ type path struct {
 	artifact artifactType
 }
 
+type artifactType struct {
+	classifier string
+	extension  string
+}
+
 func parsePath(path string, parseArtifact bool) (p path, err error) {
 	switch {
 	case strings.HasSuffix(path, md5Extension):

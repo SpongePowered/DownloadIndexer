@@ -18,13 +18,11 @@ import (
 const (
 	maxFileSize = 64 * 1024 * 1024 // 64 MB
 
-	projectTimeout = 5 * time.Minute
-	versionTimeout = 15 * time.Minute
-
 	jarExtension = "jar"
 
 	sessionCookieName   = "IndexerSession"
 	sessionSecretLength = 32
+	sessionTimeout      = 5 * time.Minute
 )
 
 type Indexer struct {
@@ -33,20 +31,20 @@ type Indexer struct {
 	repo maven.Repository
 	git  *git.Manager
 
-	projects map[maven.Identifier]*project
-	sessions map[string]*session
+	projects    map[maven.Identifier]*project
+	sessions    map[string]*session
+	sessionLock sync.RWMutex
 }
 
 type metadata struct {
 	session string
 	lock    sync.Mutex
-	timeout *time.Timer
 }
 
 type project struct {
-	metadata *metadata
-	id       uint
+	id uint
 
+	metadata            *metadata
 	versionMetadata     map[string]*metadata
 	versionMetadataLock sync.RWMutex
 }
@@ -60,16 +58,14 @@ type session struct {
 	tx *sql.Tx
 
 	downloadID uint
-	artifacts  map[artifactType]artifact
+	artifacts  map[artifactType]*artifact
 
-	lock sync.Mutex
+	timeout *time.Timer
 
-	lockedMetadata int
-}
+	lockedProjectMeta bool
+	lockedVersionMeta *metadata
 
-type artifactType struct {
-	classifier string
-	extension  string
+	_lock sync.Mutex
 }
 
 type artifact struct {
@@ -88,12 +84,6 @@ func Create(m *downloads.Manager, repo maven.Repository, git *git.Manager) *Inde
 	}
 }
 
-func createMetadata() *metadata {
-	m := &metadata{timeout: time.NewTimer(0)}
-	m.timeout.Stop()
-	return m
-}
-
 func (i *Indexer) LoadProjects() error {
 	rows, err := i.DB.Query("SELECT id, group_id, artifact_id FROM projects;")
 	if err != nil {
@@ -102,7 +92,7 @@ func (i *Indexer) LoadProjects() error {
 
 	for rows.Next() {
 		var identifier maven.Identifier
-		project := &project{metadata: createMetadata(), versionMetadata: make(map[string]*metadata)}
+		project := &project{metadata: new(metadata), versionMetadata: make(map[string]*metadata)}
 
 		err = rows.Scan(&project.id, &identifier.GroupID, &identifier.ArtifactID)
 		if err != nil {
@@ -133,17 +123,17 @@ func (i *Indexer) Get(ctx *macaron.Context) error {
 		return downloads.NotFound("Unknown project")
 	}
 
-	var session *session
+	var s *session
 	var meta *metadata
 	if p.version == "" {
-		session, err = i.requireSession(ctx, project, p.version)
+		s, err = i.requireSession(ctx, project, p.version)
 		if err != nil {
 			return err
 		}
 
 		meta = project.metadata
 	} else {
-		session, err = i.getOrCreateSession(ctx, project, p.version)
+		s, err = i.getOrCreateSession(ctx, project, p.version)
 		if err != nil {
 			return err
 		}
@@ -151,21 +141,16 @@ func (i *Indexer) Get(ctx *macaron.Context) error {
 		meta = project.getOrCreateVersionMetadata(p.version)
 	}
 
-	if p.t == file && meta.session != session.id {
-		meta.lock.Lock()
-		session.lockedMetadata++
-		meta.session = session.id
+	defer s.unlock()
 
-		go func() {
-			<-meta.timeout.C
-			meta.session = ""
-			meta.lock.Unlock()
-		}()
+	if p.t == file && meta.session != s.id {
+		meta.lock.Lock()
+		meta.session = s.id
 
 		if p.version == "" {
-			meta.timeout.Reset(projectTimeout)
+			s.lockedProjectMeta = true
 		} else {
-			meta.timeout.Reset(versionTimeout)
+			s.lockedVersionMeta = meta
 		}
 	}
 
@@ -208,6 +193,8 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 		}
 	}
 
+	defer s.unlock()
+
 	// Read file from request body (with the specified length)
 	data := make([]byte, ctx.Req.ContentLength)
 	_, err = io.ReadFull(ctx.Req.Body().ReadCloser(), data)
@@ -220,10 +207,15 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 	if !p.metadata {
 		a := s.artifacts[p.artifact]
 
+		if a == nil {
+			a = new(artifact)
+			s.artifacts[p.artifact] = a
+		}
+
 		// Process artifact
 		switch p.t {
 		case file:
-			if a.uploaded {
+			if a != nil && a.uploaded {
 				return downloads.Error(http.StatusConflict, "Artifact already uploaded", nil)
 			}
 
@@ -263,10 +255,15 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 			return downloads.Forbidden("Cannot modify metadata without a lock")
 		}
 
-		meta.timeout.Reset(0) // Stop timeout and unlock
-		s.lockedMetadata--
+		meta.unlock()
 
-		if s.lockedMetadata <= 0 {
+		if p.version == "" {
+			s.lockedProjectMeta = false
+		} else {
+			s.lockedVersionMeta = nil
+		}
+
+		if !s.lockedProjectMeta && s.lockedVersionMeta == nil {
 			// Woo, we're done!
 			err = s.tx.Commit()
 			if err != nil {
@@ -274,7 +271,8 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 			}
 
 			s.tx = nil
-			s.artifacts = nil
+
+			// We let the timeout do its work to cleanup the session
 		}
 	}
 
@@ -296,6 +294,7 @@ func (i *Indexer) requireSession(ctx *macaron.Context, project *project, version
 		return s, downloads.BadRequest("Invalid session provided", nil)
 	}
 
+	s.lock()
 	return s, nil
 }
 
@@ -312,10 +311,59 @@ func (i *Indexer) getOrCreateSession(ctx *macaron.Context, project *project, ver
 		id:        sessionID,
 		project:   project,
 		version:   version,
-		artifacts: make(map[artifactType]artifact),
+		artifacts: make(map[artifactType]*artifact),
+		timeout:   time.NewTimer(0),
 	}
+
+	<-s.timeout.C
+
+	s.lock()
+
 	i.sessions[sessionID] = s
+
+	// Start goroutine which will delete the session after timeout
+	go s.delete(i)
+
 	return s, nil
+}
+
+func (s *session) lock() {
+	s._lock.Lock()
+	s.timeout.Stop()
+}
+
+func (s *session) unlock() {
+	s.timeout.Reset(sessionTimeout)
+	s._lock.Unlock()
+}
+
+func (s *session) delete(i *Indexer) {
+	<-s.timeout.C
+
+	if s.tx != nil {
+		err := s.tx.Rollback()
+		if err != nil {
+			i.Log.Println("Failed to rollback transaction", err)
+		}
+	}
+
+	// Release metadata locks
+	if s.lockedProjectMeta {
+		s.project.metadata.unlock()
+	}
+
+	if s.lockedVersionMeta != nil {
+		s.lockedVersionMeta.unlock()
+	}
+
+	i.sessionLock.Lock()
+	defer i.sessionLock.Unlock()
+	delete(i.sessions, s.id)
+}
+
+func (m *metadata) unlock() {
+	m.session = ""
+	m.lock.Unlock()
 }
 
 func (p *project) getVersionMetadata(version string) *metadata {
@@ -330,7 +378,7 @@ func (p *project) getOrCreateVersionMetadata(version string) (m *metadata) {
 		p.versionMetadataLock.Lock()
 		defer p.versionMetadataLock.Unlock()
 
-		m = createMetadata()
+		m = new(metadata)
 		p.versionMetadata[version] = m
 	}
 
