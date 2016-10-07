@@ -13,6 +13,8 @@ import (
 	"time"
 )
 
+var emptyArray [0]struct{}
+
 type download struct {
 	Version         string    `json:"version"`
 	SnapshotVersion *string   `json:"snapshotVersion,omitempty"`
@@ -147,6 +149,12 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error
 	ids.WriteByte(')')
 
 	rows.Close()
+
+	if downloadsSlice == nil {
+		// No downloads available
+		ctx.JSON(http.StatusOK, emptyArray)
+		return nil
+	}
 
 	rows, err = a.DB.Query("SELECT download_id, classifier, extension, size, sha1, md5 FROM artifacts WHERE download_id IN " + ids.String() + ";")
 	if err != nil {
