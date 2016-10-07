@@ -364,15 +364,19 @@ func (s *session) release(i *Indexer) {
 		if err != nil {
 			i.Log.Println("Failed to rollback transaction", err)
 		}
+
+		s.tx = nil
 	}
 
 	// Release metadata locks
 	if s.lockedProjectMeta {
 		s.project.metadata.unlock()
+		s.lockedProjectMeta = false
 	}
 
 	if s.lockedVersionMeta != nil {
 		s.lockedVersionMeta.unlock()
+		s.lockedVersionMeta = nil
 	}
 }
 
