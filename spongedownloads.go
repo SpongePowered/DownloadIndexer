@@ -63,10 +63,9 @@ func main() {
 	// Initialize web framework
 	m := macaron.New()
 	m.Use(macaron.Logger())
-	m.Use(macaron.Recovery())
 
 	m.Group("/api/v1", func() {
-
+		m.Use(macaron.Recovery())
 		m.Map(downloads.ErrorHandler(api.Log))
 
 		m.Use(macaron.Renderer(macaron.RenderOptions{IndentJSON: true}))
@@ -93,9 +92,10 @@ func main() {
 		})
 	})
 
-	m.Use(macaron.Renderer(macaron.RenderOptions{IndentJSON: true}))
-
 	m.Group("/maven/upload", func() {
+		m.Use(indexer.ErrorHandler)
+		m.Use(macaron.Recovery())
+
 		m.Map(downloads.ErrorHandler(indexer.Log))
 		m.Use(auth.Basic(user, password))
 

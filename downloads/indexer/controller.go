@@ -10,6 +10,7 @@ import (
 	"gopkg.in/macaron.v1"
 	"io"
 	"net/http"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -60,6 +61,7 @@ type session struct {
 	downloadID uint
 	artifacts  map[artifactType]*artifact
 
+	failed  bool
 	timeout *time.Timer
 
 	lockedProjectMeta bool
@@ -195,6 +197,10 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 
 	defer s.unlock()
 
+	if s.failed {
+		return downloads.Error(http.StatusFailedDependency, "Previous request failed", nil)
+	}
+
 	// Read file from request body (with the specified length)
 	data := make([]byte, ctx.Req.ContentLength)
 	_, err = io.ReadFull(ctx.Req.Body().ReadCloser(), data)
@@ -279,6 +285,19 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 	return i.repo.Upload(path, bytes.NewReader(data))
 }
 
+func (i *Indexer) ErrorHandler(ctx *macaron.Context) {
+	ctx.Next()
+
+	if ctx.Resp.Status() != 200 {
+		// Error occurred
+		sv := ctx.GetVal(reflect.TypeOf((*session)(nil)))
+		if sv.IsValid() {
+			s := sv.Interface().(*session)
+			s.fail(i)
+		}
+	}
+}
+
 func (i *Indexer) requireSession(ctx *macaron.Context, project *project, version string) (*session, error) {
 	sessionID := ctx.GetCookie(sessionCookieName)
 	if sessionID == "" {
@@ -294,7 +313,7 @@ func (i *Indexer) requireSession(ctx *macaron.Context, project *project, version
 		return s, downloads.BadRequest("Invalid session provided", nil)
 	}
 
-	s.lock()
+	s.lock(ctx)
 	return s, nil
 }
 
@@ -317,7 +336,7 @@ func (i *Indexer) getOrCreateSession(ctx *macaron.Context, project *project, ver
 
 	<-s.timeout.C
 
-	s.lock()
+	s.lock(ctx)
 
 	i.sessions[sessionID] = s
 
@@ -327,7 +346,9 @@ func (i *Indexer) getOrCreateSession(ctx *macaron.Context, project *project, ver
 	return s, nil
 }
 
-func (s *session) lock() {
+func (s *session) lock(ctx *macaron.Context) {
+	ctx.Map(s)
+
 	s._lock.Lock()
 	s.timeout.Stop()
 }
@@ -337,9 +358,7 @@ func (s *session) unlock() {
 	s._lock.Unlock()
 }
 
-func (s *session) delete(i *Indexer) {
-	<-s.timeout.C
-
+func (s *session) release(i *Indexer) {
 	if s.tx != nil {
 		err := s.tx.Rollback()
 		if err != nil {
@@ -355,6 +374,19 @@ func (s *session) delete(i *Indexer) {
 	if s.lockedVersionMeta != nil {
 		s.lockedVersionMeta.unlock()
 	}
+}
+
+func (s *session) fail(i *Indexer) {
+	if !s.failed {
+		s.failed = true
+		s.release(i)
+	}
+}
+
+func (s *session) delete(i *Indexer) {
+	<-s.timeout.C
+
+	s.release(i)
 
 	i.sessionLock.Lock()
 	defer i.sessionLock.Unlock()

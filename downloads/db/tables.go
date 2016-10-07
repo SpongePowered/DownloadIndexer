@@ -45,7 +45,7 @@ func createTables(db *sql.DB) (err error) {
 			snapshot_version text,
 			published timestamp(0) with time zone not null,
 			commit char(40) not null,
-			minecraft text,
+			minecraft text not null,
 			label text,
 			changelog jsonb,
 			UNIQUE(branch_id, published)

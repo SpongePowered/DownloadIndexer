@@ -30,7 +30,10 @@ func (s *session) createDownload(i *Indexer, snapshotVersion string, mainJar []b
 		return downloads.BadRequest("Missing Git-Branch in manifest", err)
 	}
 
-	minecraft := db.ToNullString(m["Minecraft-Version"])
+	minecraft := m["Minecraft-Version"]
+	if minecraft == "" {
+		return downloads.BadRequest("Missing Minecraft-Version in manifest", err)
+	}
 
 	// TODO: Re-enable this? Currently only fetched directly in API call
 	/*// Fetch commit
