@@ -296,7 +296,8 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 func (i *Indexer) ErrorHandler(ctx *macaron.Context) {
 	ctx.Next()
 
-	if ctx.Resp.Status() != 200 {
+	status := ctx.Resp.Status()
+	if status != http.StatusOK && (ctx.Req.Method != http.MethodGet || status != http.StatusNotFound) {
 		// Error occurred
 		sv := ctx.GetVal(reflect.TypeOf((*session)(nil)))
 		if sv.IsValid() {
