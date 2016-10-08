@@ -9,10 +9,11 @@ import (
 const signedOff = "Signed-off-by:"
 
 type Commit struct {
-	ID      string    `json:"id"`
-	Author  string    `json:"author"`
-	Date    time.Time `json:"date"`
-	Message string    `json:"message"`
+	ID          string    `json:"id"`
+	Author      string    `json:"author"`
+	Date        time.Time `json:"date"`
+	Title       string    `json:"title"`
+	Description string    `json:"description,omitempty"`
 
 	Submodules map[string][]*Commit `json:"submodules,omitempty"`
 }
@@ -86,11 +87,12 @@ func (r *Repository) generateChangelog(id *git.Oid, parents []*git.Oid) (commits
 func (r *Repository) prepareCommit(commit *git.Commit) (result *Commit, err error) {
 	author := commit.Author()
 	result = &Commit{
-		ID:      commit.Id().String(),
-		Author:  author.Name,
-		Date:    author.When,
-		Message: cleanCommitMessage(commit.Message()),
+		ID:     commit.Id().String(),
+		Author: author.Name,
+		Date:   author.When,
 	}
+
+	result.Title, result.Description = splitCommitMessage(commit.Message())
 
 	tree, err := commit.Tree()
 	if err != nil {
@@ -154,11 +156,31 @@ func (r *Repository) prepareCommit(commit *git.Commit) (result *Commit, err erro
 	return
 }
 
-func cleanCommitMessage(message string) string {
-	i := strings.LastIndex(message, signedOff)
+func splitCommitMessage(input string) (title string, message string) {
+	// Remove signed off by from message (not really useful for changelog)
+	i := strings.LastIndex(input, signedOff)
 	if i >= 0 {
-		message = message[:i]
+		input = input[:i]
 	}
 
-	return strings.TrimSpace(message)
+	input = strings.TrimSpace(input)
+
+	// Attempt to normalize the line endings (convert all to just \n)
+	input = normalizeLineEndings(input)
+
+	i = strings.IndexByte(input, '\n')
+	if i >= 0 {
+		title = strings.TrimSpace(input[:i])
+		message = strings.TrimSpace(input[i:])
+	} else {
+		title = input
+	}
+
+	return
+}
+
+func normalizeLineEndings(input string) string {
+	input = strings.Replace(input, "\r\n", "\n", -1)
+	input = strings.Replace(input, "\r", "\n", -1)
+	return input
 }
