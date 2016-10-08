@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+const signedOff = "Signed-off-by:"
+
 type Commit struct {
 	ID      string    `json:"id"`
 	Author  string    `json:"author"`
@@ -87,7 +89,7 @@ func (r *Repository) prepareCommit(commit *git.Commit) (result *Commit, err erro
 		ID:      commit.Id().String(),
 		Author:  author.Name,
 		Date:    author.When,
-		Message: strings.TrimSpace(commit.Message()),
+		Message: cleanCommitMessage(commit.Message()),
 	}
 
 	tree, err := commit.Tree()
@@ -150,4 +152,13 @@ func (r *Repository) prepareCommit(commit *git.Commit) (result *Commit, err erro
 	}
 
 	return
+}
+
+func cleanCommitMessage(message string) string {
+	i := strings.LastIndex(message, signedOff)
+	if i >= 0 {
+		message = message[:i]
+	}
+
+	return strings.TrimSpace(message)
 }
