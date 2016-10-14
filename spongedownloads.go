@@ -32,10 +32,10 @@ func main() {
 	}
 
 	// TODO
-	err = db.Reset(postgresDB)
+	/*err = db.Reset(postgresDB)
 	if err != nil {
 		log.Fatalln(err)
-	}
+	}*/
 
 	manager := &downloads.Manager{DB: postgresDB}
 
@@ -91,6 +91,7 @@ func main() {
 		})
 	},
 		macaron.Recovery(),
+		api.AddHeaders,
 		renderer)
 
 	m.Group("/maven/upload", func() {

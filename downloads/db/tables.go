@@ -74,9 +74,9 @@ func createTables(db *sql.DB) (err error) {
 func addProjects(db *sql.DB) (err error) {
 	_, err = db.Exec(`INSERT INTO projects VALUES (
 		DEFAULT,
-		'net.minecrell',
-		'maventest',
-		'MavenTest',
+		'org.spongepowered',
+		'spongevanilla',
+		'SpongeVanilla',
 		'SpongePowered',
 		'SpongeVanilla'
 	);`)
