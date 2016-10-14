@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"database/sql"
 	"github.com/Minecrell/SpongeDownloads/downloads"
 	"github.com/Minecrell/SpongeDownloads/downloads/maven"
 	"gopkg.in/macaron.v1"
@@ -18,13 +19,12 @@ type project struct {
 		Repo  string `json:"repo"`
 	} `json:"github"`
 
-	BuildTypes []*buildType     `json:"buildTypes,omitempty"`
+	BuildTypes map[string]*buildType     `json:"buildTypes,omitempty"`
 	Minecraft  minecraftSupport `json:"minecraft"`
 }
 
 type buildType struct {
 	id        int
-	Name      string `json:"name"`
 	Minecraft string `json:"minecraft,omitempty"`
 }
 
@@ -57,12 +57,15 @@ func (a *API) GetProjects(ctx *macaron.Context) error {
 }
 
 func (a *API) GetProject(ctx *macaron.Context, c maven.Identifier) error {
-	var p project
+	p := project{BuildTypes: make(map[string]*buildType)}
 	var projectID uint
 
 	row := a.DB.QueryRow("SELECT * FROM projects WHERE group_id = $1 AND artifact_id = $2;", c.GroupID, c.ArtifactID)
 	err := row.Scan(&projectID, &p.GroupID, &p.ArtifactID, &p.Name, &p.GitHub.Owner, &p.GitHub.Repo)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return downloads.NotFound("Unknown project")
+		}
 		return downloads.InternalError("Database error (failed to lookup project)", err)
 	}
 
@@ -97,7 +100,7 @@ func (a *API) GetProject(ctx *macaron.Context, c maven.Identifier) error {
 		ids.WriteString(strconv.Itoa(id))
 
 		if main {
-			p.BuildTypes = append(p.BuildTypes, &buildType{id: id, Name: name})
+			p.BuildTypes[name] = &buildType{id: id}
 		}
 	}
 
@@ -111,6 +114,9 @@ func (a *API) GetProject(ctx *macaron.Context, c maven.Identifier) error {
 	if err != nil {
 		return downloads.InternalError("Database error (failed to lookup supported Minecraft versions)", err)
 	}
+
+	p.Minecraft.Current = make([]string, 0)
+	p.Minecraft.Unsupported = make([]string, 0)
 
 	for rows.Next() {
 		var id int
