@@ -19,8 +19,8 @@ type project struct {
 		Repo  string `json:"repo"`
 	} `json:"github"`
 
-	BuildTypes map[string]*buildType     `json:"buildTypes,omitempty"`
-	Minecraft  minecraftSupport `json:"minecraft"`
+	BuildTypes map[string]*buildType `json:"buildTypes,omitempty"`
+	Minecraft  minecraftSupport      `json:"minecraft"`
 }
 
 type buildType struct {

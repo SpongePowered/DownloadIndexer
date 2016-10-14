@@ -55,6 +55,7 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error
 		limit = 100
 	}
 
+	since := ctx.Query("since")
 	until := ctx.Query("until")
 	changelog := ctx.Query("changelog") != ""
 
@@ -88,9 +89,16 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error
 		i++
 	}
 
+	if since != "" {
+		args = append(args, since)
+		buffer.WriteString(" AND published > $")
+		buffer.WriteByte('0' + i)
+		i++
+	}
+
 	if until != "" {
 		args = append(args, until)
-		buffer.WriteString(" AND published < $4 ")
+		buffer.WriteString(" AND published < $")
 		buffer.WriteByte('0' + i)
 		i++
 	}
