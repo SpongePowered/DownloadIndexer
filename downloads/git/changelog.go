@@ -35,10 +35,10 @@ func (r *Repository) GenerateChangelog(commitHash, parentHash string) (commits [
 		return
 	}
 
-	return r.generateChangelog(id, []*git.Oid{parent})
+	return r.generateChangelog(id, parent)
 }
 
-func (r *Repository) generateChangelog(id *git.Oid, parents []*git.Oid) (commits []*Commit, err error) {
+func (r *Repository) generateChangelog(id *git.Oid, parent *git.Oid) (commits []*Commit, err error) {
 	commitHash := id.String()
 
 	// Have we already tried (and failed) to load this commit?
@@ -50,6 +50,8 @@ func (r *Repository) generateChangelog(id *git.Oid, parents []*git.Oid) (commits
 	if err != nil {
 		return
 	}
+
+	w.Sorting(git.SortTopological)
 
 	err = w.Push(id)
 	if err != nil {
@@ -65,11 +67,9 @@ func (r *Repository) generateChangelog(id *git.Oid, parents []*git.Oid) (commits
 		}
 	}
 
-	for _, parent := range parents {
-		err = w.Hide(parent)
-		if err != nil {
-			r.Log.Println("Failed to push commit parent", err)
-		}
+	err = w.Hide(parent)
+	if err != nil {
+		return
 	}
 
 	err = w.Iterate(func(commit *git.Commit) bool {
@@ -113,28 +113,24 @@ func (r *Repository) prepareCommit(commit *git.Commit) (result *Commit, err erro
 			continue
 		}
 
-		diffs := make([]*git.Oid, 0)
-		for i := uint(0); i < commit.ParentCount(); i++ {
-			parentCommit := commit.Parent(i)
-
-			parentTree, err := parentCommit.Tree()
-			if err != nil {
-				r.Log.Println("Failed to get tree for parent commit", err)
-				continue
-			}
-
-			parentSubEntry, err := parentTree.EntryByPath(path)
-			if err != nil {
-				r.Log.Println("Failed to get submodule entry for parent comit", err)
-				continue
-			}
-
-			if !subEntry.Id.Equal(parentSubEntry.Id) {
-				diffs = append(diffs, parentSubEntry.Id)
-			}
+		if commit.ParentCount() == 0 {
+			continue
 		}
 
-		if len(diffs) == 0 {
+		parentCommit := commit.Parent(0)
+		parentTree, err := parentCommit.Tree()
+		if err != nil {
+			r.Log.Println("Failed to get tree for parent commit", err)
+			continue
+		}
+
+		parentSubEntry, err := parentTree.EntryByPath(path)
+		if err != nil {
+			r.Log.Println("Failed to get submodule entry for parent comit", err)
+			continue
+		}
+
+		if subEntry.Id.Equal(parentSubEntry.Id) {
 			continue
 		}
 
@@ -144,7 +140,7 @@ func (r *Repository) prepareCommit(commit *git.Commit) (result *Commit, err erro
 			continue
 		}
 
-		commits, err := subRepo.generateChangelog(subEntry.Id, diffs)
+		commits, err := subRepo.generateChangelog(subEntry.Id, parentSubEntry.Id)
 		subRepo.Close()
 		if err != nil {
 			r.Log.Println("Failed to generate submodule changelog", err)
