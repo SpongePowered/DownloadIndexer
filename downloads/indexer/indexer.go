@@ -8,11 +8,13 @@ import (
 	"encoding/json"
 	"github.com/Minecrell/SpongeDownloads/downloads"
 	"github.com/Minecrell/SpongeDownloads/downloads/db"
-	"time"
+	"strings"
 )
 
+const remoteOriginPrefix = "origin/"
+
 func (s *session) createDownload(i *Indexer, snapshotVersion string, mainJar []byte) error {
-	m, err := readManifestFromZip(mainJar)
+	m, time, err := readManifestFromZip(mainJar)
 	if err != nil {
 		return downloads.BadRequest("Failed to read JAR file", err)
 	}
@@ -29,6 +31,14 @@ func (s *session) createDownload(i *Indexer, snapshotVersion string, mainJar []b
 	branch := m["Git-Branch"]
 	if branch == "" {
 		return downloads.BadRequest("Missing Git-Branch in manifest", err)
+	}
+
+	if strings.HasPrefix(branch, remoteOriginPrefix) {
+		branch = branch[len(remoteOriginPrefix):]
+	}
+
+	if strings.IndexByte(branch, '/') != -1 {
+		return downloads.BadRequest("Branch should not contain a slash", nil)
 	}
 
 	minecraft := m["Minecraft-Version"]
@@ -77,7 +87,7 @@ func (s *session) createDownload(i *Indexer, snapshotVersion string, mainJar []b
 	}
 
 	row = s.tx.QueryRow("INSERT INTO downloads VALUES (DEFAULT, $1, $2, $3, $4, $5, $6, $7, NULL, $8) RETURNING id;",
-		s.project.id, branchID, s.version, db.ToNullString(snapshotVersion), time.Now(), commit, minecraft,
+		s.project.id, branchID, s.version, db.ToNullString(snapshotVersion), time, commit, minecraft,
 		db.ToNullString(changelog))
 	err = row.Scan(&s.downloadID)
 	if err != nil {

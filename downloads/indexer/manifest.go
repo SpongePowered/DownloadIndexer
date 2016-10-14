@@ -6,13 +6,14 @@ import (
 	"bytes"
 	"io"
 	"strings"
+	"time"
 )
 
 const manifestPath = "META-INF/MANIFEST.MF"
 
 type manifest map[string]string
 
-func readManifestFromZip(zipBytes []byte) (m manifest, err error) {
+func readManifestFromZip(zipBytes []byte) (m manifest, time time.Time, err error) {
 	reader, err := zip.NewReader(bytes.NewReader(zipBytes), int64(len(zipBytes)))
 	if err != nil {
 		return
@@ -20,6 +21,8 @@ func readManifestFromZip(zipBytes []byte) (m manifest, err error) {
 
 	for _, file := range reader.File {
 		if file.Name == manifestPath {
+			time = file.ModTime()
+
 			var r io.ReadCloser
 			r, err = file.Open()
 			if err != nil {
