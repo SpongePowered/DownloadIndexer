@@ -9,17 +9,17 @@ func ConnectPostgres(url string) (*sql.DB, error) {
 	return sql.Open("postgres", url)
 }
 
-func Reset(db *sql.DB) (err error) {
-	err = dropTables(db)
+func Reset(db *sql.DB) error {
+	err := dropTables(db)
 	if err != nil {
-		return
+		return err
 	}
 
 	err = createTables(db)
 	if err != nil {
-		return
+		return err
 	}
 
-	err = addProjects(db)
-	return
+	err = setupProjects(db)
+	return nil
 }

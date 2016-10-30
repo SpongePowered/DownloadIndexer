@@ -22,6 +22,8 @@ func CreateRepository(urlString string) (Repository, error) {
 		return createHTTP(u)
 	case "ftp":
 		return createFTP(u)
+	case "null":
+		return nullRepository{}, nil
 	default:
 		return nil, errors.New("Unsupported repository format: " + u.Scheme)
 	}

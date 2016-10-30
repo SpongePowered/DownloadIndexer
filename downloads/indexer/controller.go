@@ -27,7 +27,7 @@ const (
 )
 
 type Indexer struct {
-	*downloads.Service
+	*downloads.Module
 
 	repo maven.Repository
 	git  *git.Manager
@@ -43,10 +43,14 @@ type metadata struct {
 }
 
 type project struct {
-	id uint
+	id int
+
+	pluginID string
 
 	githubOwner string
 	githubRepo  string
+
+	useSnapshots bool
 
 	metadata            *metadata
 	versionMetadata     map[string]*metadata
@@ -61,7 +65,7 @@ type session struct {
 
 	tx *sql.Tx
 
-	downloadID uint
+	downloadID int
 	artifacts  map[artifactType]*artifact
 
 	failed  bool
@@ -81,7 +85,7 @@ type artifact struct {
 
 func Create(m *downloads.Manager, repo maven.Repository, git *git.Manager) *Indexer {
 	return &Indexer{
-		Service:  m.Service("Indexer"),
+		Module:   m.Module("Indexer"),
 		repo:     repo,
 		git:      git,
 		projects: make(map[maven.Identifier]*project),
@@ -90,7 +94,8 @@ func Create(m *downloads.Manager, repo maven.Repository, git *git.Manager) *Inde
 }
 
 func (i *Indexer) LoadProjects() error {
-	rows, err := i.DB.Query("SELECT id, group_id, artifact_id, github_owner, github_repo FROM projects;")
+	rows, err := i.DB.Query("SELECT project_id, group_id, artifact_id, plugin_id, github_owner, github_repo, " +
+		"use_snapshots FROM projects;")
 	if err != nil {
 		return err
 	}
@@ -99,8 +104,8 @@ func (i *Indexer) LoadProjects() error {
 		var identifier maven.Identifier
 		project := &project{metadata: new(metadata), versionMetadata: make(map[string]*metadata)}
 
-		err = rows.Scan(&project.id, &identifier.GroupID, &identifier.ArtifactID,
-			&project.githubOwner, &project.githubRepo)
+		err = rows.Scan(&project.id, &identifier.GroupID, &identifier.ArtifactID, &project.pluginID,
+			&project.githubOwner, &project.githubRepo, &project.useSnapshots)
 		if err != nil {
 			return err
 		}
@@ -109,6 +114,17 @@ func (i *Indexer) LoadProjects() error {
 	}
 
 	return nil
+}
+
+func (i *Indexer) Setup(m *macaron.Macaron, auth macaron.Handler) {
+	m.Group("/maven/upload", func() {
+		m.Get("/*", i.Get)
+		m.Put("/*", i.Put)
+	},
+		i.InitializeContext,
+		i.ErrorHandler,
+		macaron.Recovery(),
+		auth)
 }
 
 func (i *Indexer) Get(ctx *macaron.Context) error {
@@ -138,13 +154,15 @@ func (i *Indexer) Get(ctx *macaron.Context) error {
 		}
 
 		meta = project.metadata
-	} else {
+	} else if project.useSnapshots {
 		s, err = i.getOrCreateSession(ctx, project, p.version)
 		if err != nil {
 			return err
 		}
 
 		meta = project.getOrCreateVersionMetadata(p.version)
+	} else {
+		return downloads.BadRequest("Project does not use snapshots", nil)
 	}
 
 	defer s.unlock()
@@ -188,10 +206,14 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 		return downloads.NotFound("Unknown project")
 	}
 
+	if p.snapshot && !project.useSnapshots {
+		return downloads.BadRequest("Project does not use snapshots", nil)
+	}
+
 	main := p.artifact.classifier == "" && p.artifact.extension == jarExtension
 
 	var s *session
-	if p.metadata || p.snapshotVersion != "" || !main {
+	if p.metadata || p.snapshot || !main {
 		s, err = i.requireSession(ctx, project, p.version)
 		if err != nil {
 			return err
@@ -234,7 +256,7 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 			}
 
 			if main {
-				err = s.createDownload(i, p.snapshotVersion, data)
+				err = s.createDownload(i, p.displayVersion, data, project.useSnapshots && !p.snapshot)
 				if err != nil {
 					return err
 				}

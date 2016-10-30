@@ -45,30 +45,35 @@ func InternalError(message string, cause error) error {
 	return Error(http.StatusInternalServerError, message, cause)
 }
 
-func ErrorHandler(log *log.Logger) macaron.ReturnHandler {
+func ErrorHandler() macaron.ReturnHandler {
 	return func(ctx *macaron.Context, vals []reflect.Value) {
 		switch len(vals) {
 		case 0:
 			return
 		case 1:
 			if vals[0].IsNil() {
-				if ctx.Resp.Status() == 0 {
-					ctx.Status(http.StatusOK)
+				if !ctx.Written() {
+					ctx.Resp.WriteHeader(http.StatusOK)
 				}
 				return
 			}
 
 			err := vals[0].Interface().(error)
-			log.Println(err)
 
-			httpError, ok := err.(*StatusError)
-			if ok {
-				ctx.Status(httpError.Status)
+			loggerVal := ctx.GetVal(reflect.TypeOf((*log.Logger)(nil)))
+			if loggerVal.IsValid() {
+				loggerVal.Interface().(*log.Logger).Println(err)
+			} else {
+				log.Println(err)
+			}
+
+			if httpError, ok := err.(*StatusError); ok {
+				ctx.Resp.WriteHeader(httpError.Status)
 				if httpError.Message != "" {
 					ctx.Write([]byte(httpError.Message))
 				}
 			} else {
-				ctx.Status(http.StatusInternalServerError)
+				ctx.Resp.WriteHeader(http.StatusInternalServerError)
 			}
 		default:
 			panic("Unsupported number of return arguments")

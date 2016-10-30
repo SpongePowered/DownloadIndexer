@@ -1,32 +1,53 @@
 package main
 
 import (
+	"database/sql"
 	"github.com/Minecrell/SpongeDownloads/downloads"
-	"github.com/Minecrell/SpongeDownloads/downloads/api"
+	"github.com/Minecrell/SpongeDownloads/downloads/auth"
 	"github.com/Minecrell/SpongeDownloads/downloads/db"
-	"github.com/Minecrell/SpongeDownloads/downloads/git"
-	"github.com/Minecrell/SpongeDownloads/downloads/indexer"
-	"github.com/Minecrell/SpongeDownloads/downloads/maven"
-	"github.com/go-macaron/auth"
 	"gopkg.in/macaron.v1"
 	"log"
-	"net/http"
 	"os"
 	"strings"
 )
 
 func main() {
-	uploadURL := requireEnv("UPLOAD_URL")
-	repoURL := requireEnv("REPO_URL")
+	// Parse module configuration
+	enableIndexer, enableAPI, enablePromote := true, true, true
 
-	user := requireEnv("MAVEN_USER")
-	password := requireEnv("MAVEN_PASSWORD")
+	if modules := parseModules("MODULES"); modules != nil {
+		enableIndexer = modules.isEnabled("indexer")
+		enableAPI = modules.isEnabled("api")
+		enablePromote = modules.isEnabled("promote")
+	}
 
-	postgresUrl := requireEnv("POSTGRES_URL")
-	gitStorage := requireEnv("GIT_STORAGE")
+	// Setup database and create manager
+	manager := &downloads.Manager{DB: setupDatabase()}
 
-	// Connect to database
-	postgresDB, err := db.ConnectPostgres(postgresUrl)
+	// Initialize web framework
+	m := macaron.New()
+	m.Use(macaron.Logger())
+	m.Map(downloads.ErrorHandler())
+
+	authHandler := setupAuthentication("API_AUTH")
+
+	if enableIndexer {
+		setupIndexer(manager, m, authHandler)
+	}
+
+	if enableAPI {
+		setupAPI(manager, m)
+	}
+
+	if enablePromote {
+		// TODO
+	}
+
+	m.Run()
+}
+
+func setupDatabase() *sql.DB {
+	postgresDB, err := db.ConnectPostgres(requireEnv("POSTGRES_URL"))
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -37,75 +58,16 @@ func main() {
 		log.Fatalln(err)
 	}*/
 
-	manager := &downloads.Manager{DB: postgresDB}
+	return postgresDB
+}
 
-	// Setup upload Maven repository
-	repo, err := maven.CreateRepository(uploadURL)
-	if err != nil {
-		log.Fatalln(err)
+func setupAuthentication(key string) macaron.Handler {
+	value := requireEnv(key)
+	if value != "" {
+		return auth.Basic([]byte(value))
+	} else {
+		return func() {}
 	}
-
-	// Initialize Git manager
-	git, err := git.Create(manager, gitStorage)
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	// Initialize indexer and API
-	indexer := indexer.Create(manager, repo, git)
-	err = indexer.LoadProjects()
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	api := api.Create(manager, repoURL)
-
-	// Initialize web framework
-	m := macaron.New()
-	m.Use(macaron.Logger())
-
-	renderer := macaron.Renderer(macaron.RenderOptions{IndentJSON: true})
-
-	m.Group("/api/v1", func() {
-		m.Map(downloads.ErrorHandler(api.Log))
-
-		m.Get("/", api.GetProjects)
-		m.Get("/*", func(ctx *macaron.Context) error {
-			parts := strings.Split(ctx.Params("*"), "/")
-
-			if len(parts) < 2 {
-				ctx.Status(http.StatusNotFound)
-				return nil
-			}
-
-			handler := api.GetProject
-			i := len(parts) - 1
-
-			// TODO: How can I make go-macaron recognize this directly?
-			if parts[i] == "downloads" {
-				i--
-				handler = api.GetDownloads
-			}
-
-			return handler(ctx, maven.Identifier{strings.Join(parts[:i], "."), parts[i]})
-		})
-	},
-		macaron.Recovery(),
-		api.AddHeaders,
-		renderer)
-
-	m.Group("/maven/upload", func() {
-		m.Map(downloads.ErrorHandler(indexer.Log))
-
-		m.Get("/*", indexer.Get)
-		m.Put("/*", indexer.Put)
-	},
-		indexer.ErrorHandler,
-		macaron.Recovery(),
-		auth.Basic(user, password),
-		renderer)
-
-	m.Run()
 }
 
 func requireEnv(key string) string {
@@ -114,4 +76,29 @@ func requireEnv(key string) string {
 		log.Fatalln(key, "is required")
 	}
 	return value
+}
+
+type modules []string
+
+func parseModules(key string) modules {
+	components, ok := os.LookupEnv(key)
+	if ok {
+		m := strings.Split(components, ",")
+		if len(m) == 0 {
+			log.Fatalln("Cannot disable all modules")
+		}
+
+		return m
+	} else {
+		return nil
+	}
+}
+
+func (m modules) isEnabled(name string) bool {
+	for _, v := range m {
+		if v == name {
+			return true
+		}
+	}
+	return false
 }

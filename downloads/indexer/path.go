@@ -26,8 +26,10 @@ type path struct {
 
 	metadata bool
 
-	version         string
-	snapshotVersion string
+	version        string
+	displayVersion string
+
+	snapshot bool
 
 	artifact artifactType
 }
@@ -66,7 +68,7 @@ func parsePath(path string, parseArtifact bool) (p path, err error) {
 	p.metadata = filename == mavenMetadataFile
 
 	if !p.metadata || strings.HasSuffix(next, snapshotSuffix) {
-		p.version = next
+		p.version, p.displayVersion = next, next
 		next, err = findPathSegment(path, &pos)
 		if err != nil {
 			return
@@ -96,7 +98,7 @@ func parsePath(path string, parseArtifact bool) (p path, err error) {
 			// Find end of snapshot version, starting with the version prefix
 			// + 16 for the datetime
 			end := findNonNumeric(filename, l+16)
-			p.snapshotVersion = filename[:end]
+			p.displayVersion = filename[:end]
 
 			filename = filename[end:]
 		} else {
@@ -148,10 +150,11 @@ func findPathSegment(s string, pos *int) (result string, err error) {
 	return
 }
 
-func substringBefore(s string, c byte) (string, bool) {
+func substringBefore(s string, c byte) string {
 	i := strings.IndexByte(s, c)
-	if i == -1 {
-		return s, false
+	if i >= 0 {
+		return s[:i]
+	} else {
+		return s
 	}
-	return s[:i], true
 }

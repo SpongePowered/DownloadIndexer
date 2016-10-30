@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"github.com/Minecrell/SpongeDownloads/downloads"
 	"github.com/Minecrell/SpongeDownloads/downloads/maven"
+	"github.com/lib/pq"
 	"gopkg.in/macaron.v1"
 	"net/http"
 	"strconv"
@@ -16,147 +17,185 @@ import (
 var emptyArray [0]struct{}
 
 type download struct {
-	Version         string    `json:"version"`
-	SnapshotVersion *string   `json:"snapshotVersion,omitempty"`
-	Type            string    `json:"type"`
-	Minecraft       string    `json:"minecraft"`
-	Commit          string    `json:"commit"`
-	Label           string    `json:"label,omitempty"`
-	Published       time.Time `json:"published"`
-	parentCommit    string
+	Version      string `json:"version"`
+	mavenVersion *string
+	Published    time.Time `json:"published"`
+	Type         string    `json:"type"`
+	Commit       string    `json:"commit"`
+	Label        *string   `json:"label,omitempty"`
 
-	Artifacts []*artifact     `json:"artifacts"`
+	Dependencies map[string]string `json:"dependencies,omitempty"`
+	Artifacts    []*artifact       `json:"artifacts"`
+
 	Changelog json.RawMessage `json:"changelog,omitempty"`
 }
 
 type artifact struct {
-	Classifier string `json:"classifier,omitempty"`
-	Extension  string `json:"extension"`
-	URL        string `json:"url"`
-	Size       int    `json:"size"`
-	SHA1       string `json:"sha1,omitempty"`
-	MD5        string `json:"md5,omitempty"`
+	URL  string `json:"url"`
+	Size int    `json:"size"`
+	SHA1 string `json:"sha1"`
+	MD5  string `json:"md5"`
 }
 
 func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error {
-	var projectID uint
+	var projectID int
 
-	row := a.DB.QueryRow("SELECT id FROM projects WHERE group_id = $1 AND artifact_id = $2;", project.GroupID, project.ArtifactID)
-	err := row.Scan(&projectID)
+	// Lookup project
+	err := a.DB.QueryRow("SELECT project_id FROM projects WHERE group_id = $1 AND artifact_id = $2;",
+		project.GroupID, project.ArtifactID).Scan(&projectID)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return downloads.NotFound("Unknown project")
+		}
 		return downloads.InternalError("Database error (failed to lookup project)", err)
+	}
+
+	// Get possible dependencies
+	rows, err := a.DB.Query("SELECT DISTINCT name FROM dependencies "+
+		"JOIN downloads USING (download_id)"+
+		"WHERE project_id = $1;", projectID)
+	if err != nil {
+		return downloads.InternalError("Database error (failed to lookup dependencies)", err)
+	}
+
+	var dependencies [][2]string
+	for rows.Next() {
+		var name string
+		rows.Scan(&name)
+
+		if val := ctx.Query(name); val != "" {
+			dependencies = append(dependencies, [2]string{name, val})
+		}
+	}
+
+	// Get build type names
+	rows, err = a.DB.Query("SELECT build_type_id, name FROM build_types;")
+	if err != nil {
+		return downloads.InternalError("Database error (failed to lookup build types)", err)
+	}
+
+	buildTypes := make(map[int]string)
+	for rows.Next() {
+		var id int
+		var name string
+		err = rows.Scan(&id, &name)
+		if err != nil {
+			return downloads.InternalError("Database error (failed to read build type)", err)
+		}
+
+		buildTypes[id] = name
 	}
 
 	buildType := ctx.Query("type")
 	minecraft := ctx.Query("minecraft")
 	limit := ctx.QueryInt("limit")
 
-	if limit > 100 || limit <= 0 {
+	if limit <= 0 {
+		limit = 10
+	} else if limit > 100 {
 		limit = 100
 	}
 
 	since := ctx.Query("since")
 	until := ctx.Query("until")
-	changelog := ctx.Query("changelog") != ""
+	_, changelog := ctx.Req.Form["changelog"]
 
-	args := make([]interface{}, 1, 5)
+	args := make([]interface{}, 1, 10)
 	args[0] = projectID
 
-	buffer := bytes.NewBufferString("SELECT downloads.id, downloads.version, downloads.snapshot_version, branches.type, downloads.minecraft, " +
-		"downloads.commit, downloads.label, downloads.published")
+	buffer := bytes.NewBufferString("SELECT download_id, build_type_id, downloads.version, maven_version, published, " +
+		"commit, label")
 
 	if changelog {
-		buffer.WriteString(", downloads.changelog")
+		buffer.WriteString(", changelog")
 	}
 
-	buffer.WriteString(" FROM downloads LEFT OUTER JOIN branches ON (downloads.branch_id = branches.id) " +
-		"WHERE downloads.project_id = $1")
+	buffer.WriteString(" FROM downloads")
 
-	var i byte
+	if dependencies != nil {
+		buffer.WriteString(" JOIN dependencies USING(download_id)")
+	}
+
+	buffer.WriteString(" WHERE project_id = $1")
+
+	var i int
 	i = 2
 
 	if buildType != "" {
 		args = append(args, buildType)
 		buffer.WriteString(" AND branches.type = $")
-		buffer.WriteByte('0' + i)
+		buffer.WriteString(strconv.Itoa(i))
 		i++
 	}
 
 	if minecraft != "" {
 		args = append(args, minecraft)
 		buffer.WriteString(" AND minecraft = $")
-		buffer.WriteByte('0' + i)
+		buffer.WriteString(strconv.Itoa(i))
 		i++
 	}
 
 	if since != "" {
 		args = append(args, since)
 		buffer.WriteString(" AND published > $")
-		buffer.WriteByte('0' + i)
+		buffer.WriteString(strconv.Itoa(i))
 		i++
 	}
 
 	if until != "" {
 		args = append(args, until)
 		buffer.WriteString(" AND published < $")
-		buffer.WriteByte('0' + i)
+		buffer.WriteString(strconv.Itoa(i))
+		i++
+	}
+
+	for _, dep := range dependencies {
+		args = append(args, dep[0], dep[1])
+		buffer.WriteString(" AND name = $")
+		buffer.WriteString(strconv.Itoa(i))
+		i++
+		buffer.WriteString(" AND dependencies.version = $")
+		buffer.WriteString(strconv.Itoa(i))
 		i++
 	}
 
 	args = append(args, limit)
-	buffer.WriteString(" ORDER BY downloads.published DESC LIMIT $")
-	buffer.WriteByte('0' + i)
+	buffer.WriteString(" ORDER BY published DESC LIMIT $")
+	buffer.WriteString(strconv.Itoa(i))
 	buffer.WriteByte(';')
 
-	rows, err := a.DB.Query(buffer.String(), args...)
+	rows, err = a.DB.Query(buffer.String(), args...)
 	if err != nil {
 		return downloads.InternalError("Database error (failed to lookup downloads)", err)
 	}
 
-	var ids bytes.Buffer
-	ids.WriteByte('(')
-
-	first := true
-
+	var downloadIDs []int64
 	var downloadsSlice []*download
 	downloadsMap := make(map[int]*download)
 
 	for rows.Next() {
-		var id int
-		var dl download
-		var label sql.NullString
+		var id, buildTypeID int
+		dl := &download{Dependencies: make(map[string]string)}
 		var changelogJSON []byte
 
 		if changelog {
-			err = rows.Scan(&id, &dl.Version, &dl.SnapshotVersion, &dl.Type, &dl.Minecraft, &dl.Commit, &label,
-				&dl.Published, &changelogJSON)
+			err = rows.Scan(&id, &buildTypeID, &dl.Version, &dl.mavenVersion, &dl.Published, &dl.Commit, &dl.Label,
+				&changelogJSON)
 		} else {
-			err = rows.Scan(&id, &dl.Version, &dl.SnapshotVersion, &dl.Type, &dl.Minecraft, &dl.Commit, &label,
-				&dl.Published)
+			err = rows.Scan(&id, &buildTypeID, &dl.Version, &dl.mavenVersion, &dl.Published, &dl.Commit, &dl.Label)
 		}
 
 		if err != nil {
 			return downloads.InternalError("Database error (failed to read downloads)", err)
 		}
 
-		dl.Label = label.String
+		dl.Type = buildTypes[buildTypeID]
 		dl.Changelog = json.RawMessage(changelogJSON)
 
-		if first {
-			first = false
-		} else {
-			ids.WriteByte(',')
-		}
-
-		ids.WriteString(strconv.Itoa(id))
-
-		downloadsSlice = append(downloadsSlice, &dl)
-		downloadsMap[id] = &dl
+		downloadIDs = append(downloadIDs, int64(id))
+		downloadsSlice = append(downloadsSlice, dl)
+		downloadsMap[id] = dl
 	}
-
-	ids.WriteByte(')')
-
-	rows.Close()
 
 	if downloadsSlice == nil {
 		// No downloads available
@@ -164,7 +203,27 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error
 		return nil
 	}
 
-	rows, err = a.DB.Query("SELECT download_id, classifier, extension, size, sha1, md5 FROM artifacts WHERE download_id IN " + ids.String() + ";")
+	// Get download dependencies
+	rows, err = a.DB.Query("SELECT download_id, name, version FROM dependencies "+
+		"WHERE download_id = ANY($1);", pq.Array(downloadIDs))
+	if err != nil {
+		return downloads.InternalError("Database error (failed to lookup dependencies)", err)
+	}
+
+	for rows.Next() {
+		var downloadID int
+		var name, version string
+		err = rows.Scan(&downloadID, &name, &version)
+		if err != nil {
+			return downloads.InternalError("Database error (failed to read dependencies)", err)
+		}
+
+		downloadsMap[downloadID].Dependencies[name] = version
+	}
+
+	// Get download artifacts
+	rows, err = a.DB.Query("SELECT download_id, classifier, extension, size, sha1, md5 FROM artifacts "+
+		"WHERE download_id = ANY($1);", pq.Array(downloadIDs))
 	if err != nil {
 		return downloads.InternalError("Database error (failed to lookup artifacts)", err)
 	}
@@ -172,23 +231,24 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error
 	urlPrefix := a.Repo + strings.Replace(project.GroupID, ".", "/", -1) + "/" + project.ArtifactID + "/"
 
 	for rows.Next() {
-		var id int
+		var downloadID int
 		var artifact artifact
+		var classifier, extension string
 
-		err = rows.Scan(&id, &artifact.Classifier, &artifact.Extension, &artifact.Size, &artifact.SHA1, &artifact.MD5)
+		err = rows.Scan(&downloadID, &classifier, &extension, &artifact.Size, &artifact.SHA1, &artifact.MD5)
 		if err != nil {
 			return downloads.InternalError("Database error (failed to read artifacts)", err)
 		}
 
-		dl := downloadsMap[id]
+		dl := downloadsMap[downloadID]
 
-		artifact.URL = urlPrefix + dl.Version + "/" + project.ArtifactID + "-" + nilFallback(dl.SnapshotVersion, dl.Version)
+		artifact.URL = urlPrefix + dl.Version + "/" + project.ArtifactID + "-" + defaultWhenNil(dl.mavenVersion, dl.Version)
 
-		if artifact.Classifier != "" {
-			artifact.URL += "-" + artifact.Classifier
+		if classifier != "" {
+			artifact.URL += "-" + classifier
 		}
 
-		artifact.URL += "." + artifact.Extension
+		artifact.URL += "." + extension
 
 		dl.Artifacts = append(dl.Artifacts, &artifact)
 	}
@@ -197,7 +257,7 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error
 	return nil
 }
 
-func nilFallback(a *string, b string) string {
+func defaultWhenNil(a *string, b string) string {
 	if a == nil {
 		return b
 	}

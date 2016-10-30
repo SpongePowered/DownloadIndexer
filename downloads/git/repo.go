@@ -13,7 +13,7 @@ import (
 var nothing = struct{}{} // This is nothing!
 
 type Manager struct {
-	*downloads.Service
+	*downloads.Module
 	StorageDir string
 
 	repos     map[string]*Repository
@@ -35,7 +35,7 @@ func Create(manager *downloads.Manager, dir string) (*Manager, error) {
 		return nil, err
 	}
 
-	return &Manager{Service: manager.Service("Git"), StorageDir: dir, repos: make(map[string]*Repository)}, nil
+	return &Manager{Module: manager.Module("Git"), StorageDir: dir, repos: make(map[string]*Repository)}, nil
 }
 
 func (m *Manager) OpenGitHub(owner, repo string) (*Repository, error) {
