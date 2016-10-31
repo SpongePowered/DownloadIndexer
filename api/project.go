@@ -7,6 +7,7 @@ import (
 	"github.com/lib/pq"
 	"gopkg.in/macaron.v1"
 	"net/http"
+	"sort"
 )
 
 type project struct {
@@ -21,7 +22,7 @@ type project struct {
 	} `json:"github"`
 
 	BuildTypes   map[string]*buildType `json:"buildTypes,omitempty"`
-	Dependencies map[string][]string   `json:"dependencies,omitempty"`
+	Dependencies map[string]versions   `json:"dependencies,omitempty"`
 
 	Snapshots bool `json:"snapshots"`
 }
@@ -34,7 +35,7 @@ type buildType struct {
 }
 
 func (a *API) GetProject(ctx *macaron.Context, c maven.Identifier) error {
-	p := project{BuildTypes: make(map[string]*buildType), Dependencies: make(map[string][]string)}
+	p := project{BuildTypes: make(map[string]*buildType), Dependencies: make(map[string]versions)}
 	var projectID int
 
 	err := a.DB.QueryRow("SELECT * FROM projects WHERE group_id = $1 AND artifact_id = $2;",
@@ -132,6 +133,10 @@ rows:
 		}
 
 		p.Dependencies[name] = append(p.Dependencies[name], version)
+	}
+
+	for _, deps := range p.Dependencies {
+		sort.Sort(deps)
 	}
 
 	ctx.JSON(http.StatusOK, p)
