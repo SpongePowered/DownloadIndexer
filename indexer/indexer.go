@@ -6,9 +6,9 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/Minecrell/SpongeDownloads/db"
 	"github.com/Minecrell/SpongeDownloads/downloads"
-	"github.com/Minecrell/SpongeDownloads/downloads/db"
-	"github.com/Minecrell/SpongeDownloads/downloads/indexer/meta"
+	"github.com/Minecrell/SpongeDownloads/indexer/meta"
 	"strings"
 )
 

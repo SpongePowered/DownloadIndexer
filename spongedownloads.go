@@ -2,9 +2,9 @@ package main
 
 import (
 	"database/sql"
+	"github.com/Minecrell/SpongeDownloads/auth"
+	"github.com/Minecrell/SpongeDownloads/db"
 	"github.com/Minecrell/SpongeDownloads/downloads"
-	"github.com/Minecrell/SpongeDownloads/downloads/auth"
-	"github.com/Minecrell/SpongeDownloads/downloads/db"
 	"gopkg.in/macaron.v1"
 	"log"
 	"os"

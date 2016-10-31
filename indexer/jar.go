@@ -3,8 +3,8 @@ package indexer
 import (
 	"archive/zip"
 	"bytes"
-	"github.com/Minecrell/SpongeDownloads/downloads/indexer/manifest"
-	"github.com/Minecrell/SpongeDownloads/downloads/indexer/meta"
+	"github.com/Minecrell/SpongeDownloads/indexer/manifest"
+	"github.com/Minecrell/SpongeDownloads/indexer/meta"
 	"time"
 )
 

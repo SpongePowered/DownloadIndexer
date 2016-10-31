@@ -1,8 +1,8 @@
 package main
 
 import (
+	"github.com/Minecrell/SpongeDownloads/api"
 	"github.com/Minecrell/SpongeDownloads/downloads"
-	"github.com/Minecrell/SpongeDownloads/downloads/api"
 	"gopkg.in/macaron.v1"
 )
 

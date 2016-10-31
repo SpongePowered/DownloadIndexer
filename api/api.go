@@ -2,7 +2,7 @@ package api
 
 import (
 	"github.com/Minecrell/SpongeDownloads/downloads"
-	"github.com/Minecrell/SpongeDownloads/downloads/maven"
+	"github.com/Minecrell/SpongeDownloads/maven"
 	"gopkg.in/macaron.v1"
 	"strings"
 )

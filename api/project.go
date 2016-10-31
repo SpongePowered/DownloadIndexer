@@ -3,7 +3,7 @@ package api
 import (
 	"database/sql"
 	"github.com/Minecrell/SpongeDownloads/downloads"
-	"github.com/Minecrell/SpongeDownloads/downloads/maven"
+	"github.com/Minecrell/SpongeDownloads/maven"
 	"github.com/lib/pq"
 	"gopkg.in/macaron.v1"
 	"net/http"
