@@ -68,24 +68,6 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error
 		}
 	}
 
-	// Get build type names
-	rows, err = a.DB.Query("SELECT build_type_id, name FROM build_types;")
-	if err != nil {
-		return downloads.InternalError("Database error (failed to lookup build types)", err)
-	}
-
-	buildTypes := make(map[int]string)
-	for rows.Next() {
-		var id int
-		var name string
-		err = rows.Scan(&id, &name)
-		if err != nil {
-			return downloads.InternalError("Database error (failed to read build type)", err)
-		}
-
-		buildTypes[id] = name
-	}
-
 	buildType := ctx.Query("type")
 	minecraft := ctx.Query("minecraft")
 	limit := ctx.QueryInt("limit")
@@ -103,14 +85,14 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error
 	args := make([]interface{}, 1, 10)
 	args[0] = projectID
 
-	buffer := bytes.NewBufferString("SELECT download_id, build_type_id, downloads.version, maven_version, published, " +
-		"commit, label")
+	buffer := bytes.NewBufferString("SELECT download_id, build_types.name, downloads.version, maven_version, " +
+		"published, commit, label")
 
 	if changelog {
 		buffer.WriteString(", changelog")
 	}
 
-	buffer.WriteString(" FROM downloads")
+	buffer.WriteString(" FROM downloads JOIN build_types USING(build_type_id)")
 
 	if dependencies != nil {
 		buffer.WriteString(" JOIN dependencies USING(download_id)")
@@ -174,22 +156,21 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error
 	downloadsMap := make(map[int]*download)
 
 	for rows.Next() {
-		var id, buildTypeID int
+		var id int
 		dl := &download{Dependencies: make(map[string]string)}
 		var changelogJSON []byte
 
 		if changelog {
-			err = rows.Scan(&id, &buildTypeID, &dl.Version, &dl.mavenVersion, &dl.Published, &dl.Commit, &dl.Label,
+			err = rows.Scan(&id, &dl.Type, &dl.Version, &dl.mavenVersion, &dl.Published, &dl.Commit, &dl.Label,
 				&changelogJSON)
 		} else {
-			err = rows.Scan(&id, &buildTypeID, &dl.Version, &dl.mavenVersion, &dl.Published, &dl.Commit, &dl.Label)
+			err = rows.Scan(&id, &dl.Type, &dl.Version, &dl.mavenVersion, &dl.Published, &dl.Commit, &dl.Label)
 		}
 
 		if err != nil {
 			return downloads.InternalError("Database error (failed to read downloads)", err)
 		}
 
-		dl.Type = buildTypes[buildTypeID]
 		dl.Changelog = json.RawMessage(changelogJSON)
 
 		downloadIDs = append(downloadIDs, int64(id))
