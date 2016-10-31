@@ -1,15 +1,14 @@
 package api
 
 import (
-	"bytes"
 	"database/sql"
 	"encoding/json"
+	"github.com/Minecrell/SpongeDownloads/db"
 	"github.com/Minecrell/SpongeDownloads/downloads"
 	"github.com/Minecrell/SpongeDownloads/maven"
 	"github.com/lib/pq"
 	"gopkg.in/macaron.v1"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -81,64 +80,42 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error
 	until := ctx.Query("until")
 	_, changelog := ctx.Req.Form["changelog"]
 
-	args := make([]interface{}, 1, 10)
-	args[0] = projectID
-
-	buffer := bytes.NewBufferString("SELECT download_id, build_types.name, downloads.version, maven_version, " +
+	builder := db.NewSQLBuilder("SELECT download_id, build_types.name, downloads.version, maven_version, " +
 		"published, commit, label")
 
 	if changelog {
-		buffer.WriteString(", changelog")
+		builder.Append(", changelog")
 	}
 
-	buffer.WriteString(" FROM downloads JOIN build_types USING(build_type_id)")
+	builder.Append(" FROM downloads JOIN build_types USING(build_type_id)")
 
 	if dependencies != nil {
-		buffer.WriteString(" JOIN dependencies USING(download_id)")
+		builder.Append(" JOIN dependencies USING(download_id)")
 	}
 
-	buffer.WriteString(" WHERE project_id = $1")
-
-	var i int
-	i = 2
+	builder.Parameter(" WHERE project_id = ", projectID)
 
 	if buildType != "" {
-		args = append(args, buildType)
-		buffer.WriteString(" AND build_types.name = $")
-		buffer.WriteString(strconv.Itoa(i))
-		i++
+		builder.Parameter(" AND build_types.name = ", buildType)
 	}
 
 	if since != "" {
-		args = append(args, since)
-		buffer.WriteString(" AND published > $")
-		buffer.WriteString(strconv.Itoa(i))
-		i++
+		builder.Parameter(" AND published > ", since)
 	}
 
 	if until != "" {
-		args = append(args, until)
-		buffer.WriteString(" AND published < $")
-		buffer.WriteString(strconv.Itoa(i))
-		i++
+		builder.Parameter(" AND published < ", until)
 	}
 
 	for _, dep := range dependencies {
-		args = append(args, dep[0], dep[1])
-		buffer.WriteString(" AND name = $")
-		buffer.WriteString(strconv.Itoa(i))
-		i++
-		buffer.WriteString(" AND dependencies.version = $")
-		buffer.WriteString(strconv.Itoa(i))
-		i++
+		builder.Parameter(" AND name = ", dep[0])
+		builder.Parameter(" AND dependencies.version = ", dep[1])
 	}
 
-	args = append(args, limit)
-	buffer.WriteString(" ORDER BY published DESC LIMIT $")
-	buffer.WriteString(strconv.Itoa(i))
-	buffer.WriteByte(';')
+	builder.Parameter(" ORDER BY published DESC LIMIT ", limit)
+	builder.End()
 
-	rows, err = a.DB.Query(buffer.String(), args...)
+	rows, err = a.DB.Query(builder.String(), builder.Args()...)
 	if err != nil {
 		return downloads.InternalError("Database error (failed to lookup downloads)", err)
 	}
