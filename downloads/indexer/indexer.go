@@ -64,15 +64,21 @@ func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []by
 	}
 
 	var buildTypeId int
-	err = i.DB.QueryRow("SELECT build_type_id FROM build_types JOIN project_build_types USING(build_type_id)"+
+	var allowsPromotion bool
+	err = i.DB.QueryRow("SELECT build_type_id, allows_promotion FROM build_types "+
+		"JOIN project_build_types USING(build_type_id) "+
 		"WHERE project_id = $1 AND name = $2;",
-		s.project.id, substringBefore(branch, buildTypeSeparator)).Scan(&buildTypeId)
+		s.project.id, substringBefore(branch, buildTypeSeparator)).Scan(&buildTypeId, &allowsPromotion)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return downloads.BadRequest("Unknown build type", err)
 		} else {
 			return downloads.InternalError("Database error (failed to lookup build type)", err)
 		}
+	}
+
+	if recommended && !allowsPromotion {
+		return downloads.BadRequest("Build type does not allow promotion", err)
 	}
 
 	// Start transaction
