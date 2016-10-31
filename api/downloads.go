@@ -108,7 +108,7 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error
 	}
 
 	for _, dep := range dependencies {
-		builder.Parameter(" AND name = ", dep[0])
+		builder.Parameter(" AND dependencies.name = ", dep[0])
 		builder.Parameter(" AND dependencies.version = ", dep[1])
 	}
 
