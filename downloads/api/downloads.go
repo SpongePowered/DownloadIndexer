@@ -105,7 +105,7 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error
 
 	if buildType != "" {
 		args = append(args, buildType)
-		buffer.WriteString(" AND branches.type = $")
+		buffer.WriteString(" AND build_types.name = $")
 		buffer.WriteString(strconv.Itoa(i))
 		i++
 	}
