@@ -113,7 +113,8 @@ func (r *Repository) prepareCommit(commit *git.Commit) (result *Commit, err erro
 			continue
 		}
 
-		if commit.ParentCount() == 0 {
+		// Skip merge commits
+		if commit.ParentCount() != 1 {
 			continue
 		}
 
