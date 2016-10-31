@@ -69,7 +69,6 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error
 	}
 
 	buildType := ctx.Query("type")
-	minecraft := ctx.Query("minecraft")
 	limit := ctx.QueryInt("limit")
 
 	if limit <= 0 {
@@ -106,13 +105,6 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error
 	if buildType != "" {
 		args = append(args, buildType)
 		buffer.WriteString(" AND build_types.name = $")
-		buffer.WriteString(strconv.Itoa(i))
-		i++
-	}
-
-	if minecraft != "" {
-		args = append(args, minecraft)
-		buffer.WriteString(" AND minecraft = $")
 		buffer.WriteString(strconv.Itoa(i))
 		i++
 	}
