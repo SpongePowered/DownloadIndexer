@@ -8,8 +8,9 @@ import (
 	"encoding/json"
 	"github.com/Minecrell/SpongeDownloads/db"
 	"github.com/Minecrell/SpongeDownloads/downloads"
-	"github.com/Minecrell/SpongeDownloads/indexer/meta"
+	"github.com/Minecrell/SpongeDownloads/indexer/mcmod"
 	"strings"
+	"time"
 )
 
 const (
@@ -20,16 +21,33 @@ const (
 	recommendedLabel = "recommended"
 )
 
-func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []byte, recommended bool) error {
-	m, metadata, time, err := readJar(mainJar, s.project.pluginID != "")
+var nullTime = time.Time{}
+
+func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []byte,
+	branch string, metadataBytes []byte, publishedOverride time.Time, recommended bool) error {
+
+	manifest, published, metadata, err := readJar(mainJar, s.project.pluginID != "")
 	if err != nil {
 		return downloads.BadRequest("Failed to read JAR file", err)
 	}
-	if m == nil {
+	if manifest == nil {
 		return downloads.BadRequest("Missing manifest in JAR", nil)
 	}
 
-	var pluginMeta *meta.PluginMetadata
+	if publishedOverride != nullTime {
+		published = publishedOverride
+	} else if published == nullTime {
+		return downloads.BadRequest("Missing timestamps in JAR file", nil)
+	}
+
+	if metadataBytes != nil {
+		metadata, err = mcmod.ReadMetadataBytes(metadataBytes)
+		if err != nil {
+			return downloads.BadRequest("Failed to read metadata file", err)
+		}
+	}
+
+	var pluginMeta *mcmod.Metadata
 	if metadata != nil {
 		for _, metaEntry := range metadata {
 			if metaEntry.ID == s.project.pluginID {
@@ -39,22 +57,24 @@ func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []by
 		}
 
 		if pluginMeta == nil {
-			return downloads.BadRequest("Missing plugin '"+s.project.pluginID+"' in "+meta.FileName, nil)
+			return downloads.BadRequest("Missing plugin '"+s.project.pluginID+"' in "+mcmod.MetadataFileName, nil)
 		} else if pluginMeta.Version != s.version {
-			return downloads.BadRequest(meta.FileName+" version mismatch: "+s.version+" != "+pluginMeta.Version, nil)
+			return downloads.BadRequest(mcmod.MetadataFileName+" version mismatch: "+s.version+" != "+pluginMeta.Version, nil)
 		}
 	} else if s.project.pluginID != "" {
-		return downloads.BadRequest("Missing "+meta.FileName+" in JAR", nil)
+		return downloads.BadRequest("Missing "+mcmod.MetadataFileName+" in JAR", nil)
 	}
 
-	commit := m["Git-Commit"]
+	commit := manifest["Git-Commit"]
 	if commit == "" {
 		return downloads.BadRequest("Missing Git-Commit in manifest", err)
 	}
 
-	branch := m["Git-Branch"]
 	if branch == "" {
-		return downloads.BadRequest("Missing Git-Branch in manifest", err)
+		branch = manifest["Git-Branch"]
+		if branch == "" {
+			return downloads.BadRequest("Missing Git-Branch in manifest", err)
+		}
 	}
 	if strings.HasPrefix(branch, remoteOriginPrefix) {
 		branch = branch[len(remoteOriginPrefix):]
@@ -116,8 +136,8 @@ func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []by
 
 	err = s.tx.QueryRow("INSERT INTO downloads VALUES (DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9) "+
 		"RETURNING download_id;",
-		s.project.id, buildTypeId, displayVersion, db.ToNullString(mavenVersion), time, branch, commit, db.ToNullString(label),
-		db.ToNullString(changelog)).Scan(&s.downloadID)
+		s.project.id, buildTypeId, displayVersion, db.ToNullString(mavenVersion), published, branch, commit,
+		db.ToNullString(label), db.ToNullString(changelog)).Scan(&s.downloadID)
 	if err != nil {
 		return downloads.InternalError("Database error (failed to add download)", err)
 	}

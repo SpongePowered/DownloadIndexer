@@ -1,4 +1,4 @@
-package manifest
+package jar
 
 import (
 	"bufio"
@@ -7,13 +7,13 @@ import (
 )
 
 const (
-	JarPath   = "META-INF/MANIFEST.MF"
-	separator = ':'
+	ManifestPath = "META-INF/MANIFEST.MF"
+	separator    = ':'
 )
 
 type Manifest map[string]string
 
-func Read(reader io.Reader) (Manifest, error) {
+func ReadManifest(reader io.Reader) (Manifest, error) {
 	m := make(Manifest)
 
 	scanner := bufio.NewScanner(reader)

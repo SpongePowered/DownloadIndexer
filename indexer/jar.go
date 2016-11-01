@@ -3,12 +3,12 @@ package indexer
 import (
 	"archive/zip"
 	"bytes"
-	"github.com/Minecrell/SpongeDownloads/indexer/manifest"
-	"github.com/Minecrell/SpongeDownloads/indexer/meta"
+	"github.com/Minecrell/SpongeDownloads/indexer/jar"
+	"github.com/Minecrell/SpongeDownloads/indexer/mcmod"
 	"time"
 )
 
-func readJar(zipBytes []byte, readMeta bool) (m manifest.Manifest, metadata []*meta.PluginMetadata, time time.Time, err error) {
+func readJar(zipBytes []byte, readMeta bool) (m jar.Manifest, manifestTime time.Time, metadata []*mcmod.Metadata, err error) {
 	reader, err := zip.NewReader(bytes.NewReader(zipBytes), int64(len(zipBytes)))
 	if err != nil {
 		return
@@ -16,8 +16,12 @@ func readJar(zipBytes []byte, readMeta bool) (m manifest.Manifest, metadata []*m
 
 	for _, file := range reader.File {
 		switch file.Name {
-		case manifest.JarPath:
-			time = file.ModTime()
+		case jar.ManifestPath:
+			if file.ModifiedTime != 0 || file.ModifiedDate > 33 {
+				// Modification time is set
+				manifestTime = file.ModTime()
+			}
+
 			m, err = readManifest(file)
 			if err != nil {
 				return
@@ -26,7 +30,7 @@ func readJar(zipBytes []byte, readMeta bool) (m manifest.Manifest, metadata []*m
 			if !readMeta || metadata != nil {
 				return
 			}
-		case meta.FileName:
+		case mcmod.MetadataFileName:
 			if readMeta {
 				metadata, err = readMetadata(file)
 				if err != nil {
@@ -43,22 +47,22 @@ func readJar(zipBytes []byte, readMeta bool) (m manifest.Manifest, metadata []*m
 	return
 }
 
-func readManifest(file *zip.File) (manifest.Manifest, error) {
+func readManifest(file *zip.File) (jar.Manifest, error) {
 	reader, err := file.Open()
 	if err != nil {
 		return nil, err
 	}
 
 	defer reader.Close()
-	return manifest.Read(reader)
+	return jar.ReadManifest(reader)
 }
 
-func readMetadata(file *zip.File) ([]*meta.PluginMetadata, error) {
+func readMetadata(file *zip.File) ([]*mcmod.Metadata, error) {
 	reader, err := file.Open()
 	if err != nil {
 		return nil, err
 	}
 
 	defer reader.Close()
-	return meta.Read(reader)
+	return mcmod.ReadMetadata(reader)
 }

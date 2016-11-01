@@ -1,4 +1,4 @@
-package meta
+package mcmod
 
 import (
 	"bytes"
@@ -7,11 +7,11 @@ import (
 )
 
 const (
-	FileName         = "mcmod.info"
+	MetadataFileName = "mcmod.info"
 	versionSeparator = '@'
 )
 
-type PluginMetadata struct {
+type Metadata struct {
 	ID string `json:"modid"`
 	//Name    string `json:"name,omitempty"`
 	Version string `json:"version,omitempty"`
@@ -50,12 +50,12 @@ func (d *Dependency) UnmarshalText(text []byte) error {
 	return nil
 }
 
-/*func ReadBytes(bytes []byte) ([]*PluginMetadata, error) {
-	var meta []*PluginMetadata
-	return meta, json.Unmarshal(bytes, meta)
-}*/
+func ReadMetadataBytes(bytes []byte) ([]*Metadata, error) {
+	var meta []*Metadata
+	return meta, json.Unmarshal(bytes, &meta)
+}
 
-func Read(reader io.Reader) ([]*PluginMetadata, error) {
-	var meta []*PluginMetadata
+func ReadMetadata(reader io.Reader) ([]*Metadata, error) {
+	var meta []*Metadata
 	return meta, json.NewDecoder(reader).Decode(&meta)
 }

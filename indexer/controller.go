@@ -256,7 +256,30 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 			}
 
 			if main {
-				err = s.createDownload(i, p.displayVersion, data, project.useSnapshots && !p.snapshot)
+				// Override query params (e.g. to index older builds)
+				var branch string
+				var metadataBytes []byte
+				var published time.Time
+
+				if macaron.Env == macaron.DEV {
+					// Only allow overriding in development environment
+					branch = ctx.Query("branch")
+
+					if metadataSize := ctx.QueryInt("mcmodMetadataSize"); metadataSize > 0 {
+						metadataBytes = data[:metadataSize]
+						data = data[metadataSize:]
+					}
+
+					if publishedString := ctx.Query("published"); publishedString != "" {
+						published, err = time.Parse(time.RFC3339, publishedString)
+						if err != nil {
+							return downloads.BadRequest("Failed to parse published date", err)
+						}
+					}
+				}
+
+				err = s.createDownload(i, p.displayVersion, data, branch, metadataBytes, published,
+					project.useSnapshots && !p.snapshot)
 				if err != nil {
 					return err
 				}
