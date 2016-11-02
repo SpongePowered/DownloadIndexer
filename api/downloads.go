@@ -30,7 +30,9 @@ type download struct {
 }
 
 type artifact struct {
-	URL  string `json:"url"`
+	Classifier string `json:"classifier,omitempty"`
+	URL        string `json:"url"`
+
 	Size int    `json:"size"`
 	SHA1 string `json:"sha1"`
 	MD5  string `json:"md5"`
@@ -183,9 +185,9 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error
 	for rows.Next() {
 		var downloadID int
 		var artifact artifact
-		var classifier, extension string
+		var extension string
 
-		err = rows.Scan(&downloadID, &classifier, &extension, &artifact.Size, &artifact.SHA1, &artifact.MD5)
+		err = rows.Scan(&downloadID, &artifact.Classifier, &extension, &artifact.Size, &artifact.SHA1, &artifact.MD5)
 		if err != nil {
 			return downloads.InternalError("Database error (failed to read artifacts)", err)
 		}
@@ -194,8 +196,8 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error
 
 		artifact.URL = urlPrefix + dl.Version + "/" + project.ArtifactID + "-" + defaultWhenNil(dl.mavenVersion, dl.Version)
 
-		if classifier != "" {
-			artifact.URL += "-" + classifier
+		if artifact.Classifier != "" {
+			artifact.URL += "-" + artifact.Classifier
 		}
 
 		artifact.URL += "." + extension
