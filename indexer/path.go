@@ -99,6 +99,7 @@ func parsePath(path string, parseArtifact bool) (p path, err error) {
 			// + 16 for the datetime
 			end := findNonNumeric(filename, l+16)
 			p.displayVersion = filename[:end]
+			p.snapshot = true
 
 			filename = filename[end:]
 		} else {
