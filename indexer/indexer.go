@@ -24,7 +24,7 @@ const (
 var nullTime = time.Time{}
 
 func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []byte,
-	branch string, metadataBytes []byte, publishedOverride time.Time, recommended bool) error {
+	branch string, metadataBytes []byte, publishedOverride time.Time, recommended, requireChangelog bool) error {
 
 	manifest, published, metadata, err := readJar(mainJar, s.project.pluginID != "")
 	if err != nil {
@@ -119,7 +119,11 @@ func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []by
 			// Parent commit found, generate changelog
 			changelog, err = i.generateChangelog(s.project, commit, parentCommit)
 			if err != nil {
-				return err
+				if requireChangelog {
+					return err
+				} else {
+					i.Log.Println("Failed to generate changelog for", s.version, ':', err)
+				}
 			}
 		}
 	}
