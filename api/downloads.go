@@ -23,15 +23,14 @@ type download struct {
 	Commit       string    `json:"commit"`
 	Label        *string   `json:"label,omitempty"`
 
-	Dependencies map[string]string `json:"dependencies,omitempty"`
-	Artifacts    []*artifact       `json:"artifacts"`
+	Dependencies map[string]string    `json:"dependencies,omitempty"`
+	Artifacts    map[string]*artifact `json:"artifacts"`
 
 	Changelog json.RawMessage `json:"changelog,omitempty"`
 }
 
 type artifact struct {
-	Classifier string `json:"classifier,omitempty"`
-	URL        string `json:"url"`
+	URL string `json:"url"`
 
 	Size int    `json:"size"`
 	SHA1 string `json:"sha1"`
@@ -128,7 +127,7 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error
 
 	for rows.Next() {
 		var id int
-		dl := &download{Dependencies: make(map[string]string)}
+		dl := &download{Dependencies: make(map[string]string), Artifacts: make(map[string]*artifact)}
 		var changelogJSON []byte
 
 		if changelog {
@@ -184,10 +183,10 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error
 
 	for rows.Next() {
 		var downloadID int
-		var artifact artifact
-		var extension string
+		artifact := new(artifact)
+		var classifier, extension string
 
-		err = rows.Scan(&downloadID, &artifact.Classifier, &extension, &artifact.Size, &artifact.SHA1, &artifact.MD5)
+		err = rows.Scan(&downloadID, &classifier, &extension, &artifact.Size, &artifact.SHA1, &artifact.MD5)
 		if err != nil {
 			return downloads.InternalError("Database error (failed to read artifacts)", err)
 		}
@@ -196,13 +195,12 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error
 
 		artifact.URL = urlPrefix + dl.Version + "/" + project.ArtifactID + "-" + defaultWhenNil(dl.mavenVersion, dl.Version)
 
-		if artifact.Classifier != "" {
-			artifact.URL += "-" + artifact.Classifier
+		if classifier != "" {
+			artifact.URL += "-" + classifier
 		}
 
 		artifact.URL += "." + extension
-
-		dl.Artifacts = append(dl.Artifacts, &artifact)
+		dl.Artifacts[classifier] = artifact
 	}
 
 	ctx.JSON(http.StatusOK, downloadsSlice)
