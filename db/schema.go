@@ -18,7 +18,8 @@ func createTables(db *sql.DB) error {
 			github_repo TEXT NOT NULL,
 			UNIQUE(github_owner, github_repo),
 
-			use_snapshots BOOLEAN NOT NULL
+			use_snapshots BOOLEAN NOT NULL,
+			use_semver BOOLEAN NOT NULL
 		);
 
 		CREATE TABLE build_types (

@@ -21,8 +21,10 @@ type project struct {
 		Repo  string `json:"repo"`
 	} `json:"github"`
 
-	BuildTypes   map[string]*buildType `json:"buildTypes,omitempty"`
-	Dependencies map[string]versions   `json:"dependencies,omitempty"`
+	BuildTypes map[string]*buildType `json:"buildTypes,omitempty"`
+
+	Versions     versions            `json:"versions,omitempty"`
+	Dependencies map[string]versions `json:"dependencies,omitempty"`
 
 	Snapshots bool `json:"snapshots"`
 }
@@ -37,10 +39,11 @@ type buildType struct {
 func (a *API) GetProject(ctx *macaron.Context, c maven.Identifier) error {
 	p := project{BuildTypes: make(map[string]*buildType), Dependencies: make(map[string]versions)}
 	var projectID int
+	var useSemVer bool
 
 	err := a.DB.QueryRow("SELECT * FROM projects WHERE group_id = $1 AND artifact_id = $2;",
 		c.GroupID, c.ArtifactID).Scan(&projectID, &p.Name, &p.GroupID, &p.ArtifactID, &p.PluginID,
-		&p.GitHub.Owner, &p.GitHub.Repo, &p.Snapshots)
+		&p.GitHub.Owner, &p.GitHub.Repo, &p.Snapshots, &useSemVer)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return downloads.NotFound("Unknown project")
@@ -137,6 +140,27 @@ rows:
 
 	for _, deps := range p.Dependencies {
 		sort.Sort(deps)
+	}
+
+	if useSemVer {
+		// Add all versions
+		rows, err = a.DB.Query("SELECT DISTINCT split_part(version, '-', 1) FROM downloads "+
+			"WHERE project_id = $1;", projectID)
+		if err != nil {
+			return downloads.InternalError("Database error (failed to lookup versions)", err)
+		}
+
+		for rows.Next() {
+			var version string
+			err = rows.Scan(&version)
+			if err != nil {
+				return downloads.InternalError("Database error (failed to read version)", err)
+			}
+
+			p.Versions = append(p.Versions, version)
+		}
+
+		sort.Sort(p.Versions)
 	}
 
 	ctx.JSON(http.StatusOK, p)

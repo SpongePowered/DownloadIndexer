@@ -1,12 +1,15 @@
 package git
 
 import (
+	"errors"
 	"github.com/libgit2/git2go"
 	"strings"
 	"time"
 )
 
 const signedOff = "Signed-off-by:"
+
+var errFailedCommit = errors.New("Failed to load commit")
 
 type Commit struct {
 	ID          string    `json:"id"`
@@ -18,21 +21,21 @@ type Commit struct {
 	Submodules map[string][]*Commit `json:"submodules,omitempty"`
 }
 
-func (r *Repository) GenerateChangelog(commitHash, parentHash string) (commits []*Commit, err error) {
+func (r *Repository) GenerateChangelog(commitHash, parentHash string) ([]*Commit, error) {
 	// Have we already tried (and failed) to load this commit?
 	if _, ok := r.failedCommits[commitHash]; ok {
-		return
+		return nil, errFailedCommit
 	}
 
 	id, err := git.NewOid(commitHash)
 	if err != nil {
 		r.failedCommits[commitHash] = nothing
-		return
+		return nil, err
 	}
 
 	parent, err := git.NewOid(parentHash)
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	return r.generateChangelog(id, parent)
@@ -75,7 +78,7 @@ func (r *Repository) generateChangelog(id *git.Oid, parent *git.Oid) (commits []
 	err = w.Iterate(func(commit *git.Commit) bool {
 		c, err := r.prepareCommit(commit)
 		if err != nil {
-			r.Log.Println("Failed to generate submodule changelog", err)
+			r.Log.Println("Failed to generate submodule changelog:", err)
 		}
 
 		commits = append(commits, c)
@@ -109,7 +112,7 @@ func (r *Repository) prepareCommit(commit *git.Commit) (result *Commit, err erro
 	for path, url := range submodules {
 		subEntry, err := tree.EntryByPath(path)
 		if err != nil {
-			r.Log.Println("Failed to get submodule ref", err)
+			r.Log.Println("Failed to get submodule ref:", err)
 			continue
 		}
 
@@ -121,13 +124,13 @@ func (r *Repository) prepareCommit(commit *git.Commit) (result *Commit, err erro
 		parentCommit := commit.Parent(0)
 		parentTree, err := parentCommit.Tree()
 		if err != nil {
-			r.Log.Println("Failed to get tree for parent commit", err)
+			r.Log.Println("Failed to get tree for parent commit:", err)
 			continue
 		}
 
 		parentSubEntry, err := parentTree.EntryByPath(path)
 		if err != nil {
-			r.Log.Println("Failed to get submodule entry for parent comit", err)
+			r.Log.Println("Failed to get submodule entry for parent comit:", err)
 			continue
 		}
 
@@ -137,14 +140,14 @@ func (r *Repository) prepareCommit(commit *git.Commit) (result *Commit, err erro
 
 		subRepo, err := r.Open(url)
 		if err != nil {
-			r.Log.Println("Failed to open submodule repo", err)
+			r.Log.Println("Failed to open submodule repo:", err)
 			continue
 		}
 
 		commits, err := subRepo.generateChangelog(subEntry.Id, parentSubEntry.Id)
 		subRepo.Close()
 		if err != nil {
-			r.Log.Println("Failed to generate submodule changelog", err)
+			r.Log.Println("Failed to generate submodule changelog:", err)
 		}
 
 		result.Submodules[path] = commits

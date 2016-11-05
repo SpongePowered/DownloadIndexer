@@ -18,13 +18,14 @@ const (
 	remoteOriginPrefix = "origin" + string(remoteSeparator)
 	buildTypeSeparator = '-'
 
+	emptyChangelog   = "[]"
 	recommendedLabel = "recommended"
 )
 
 var nullTime = time.Time{}
 
 func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []byte,
-	branch string, metadataBytes []byte, publishedOverride time.Time, recommended, requireChangelog bool) error {
+	buildType, branch string, metadataBytes []byte, publishedOverride time.Time, recommended bool) error {
 
 	manifest, published, metadata, err := readJar(mainJar, s.project.pluginID != "")
 	if err != nil {
@@ -75,12 +76,16 @@ func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []by
 		if branch == "" {
 			return downloads.BadRequest("Missing Git-Branch in manifest", err)
 		}
-	}
-	if strings.HasPrefix(branch, remoteOriginPrefix) {
-		branch = branch[len(remoteOriginPrefix):]
+		if strings.HasPrefix(branch, remoteOriginPrefix) {
+			branch = branch[len(remoteOriginPrefix):]
+		}
 	}
 	if strings.IndexByte(branch, remoteSeparator) != -1 {
 		return downloads.BadRequest("Branch should not contain a slash", nil)
+	}
+
+	if buildType == "" {
+		buildType = substringBefore(branch, buildTypeSeparator)
 	}
 
 	var buildTypeId int
@@ -88,7 +93,7 @@ func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []by
 	err = i.DB.QueryRow("SELECT build_type_id, allows_promotion FROM build_types "+
 		"JOIN project_build_types USING(build_type_id) "+
 		"WHERE project_id = $1 AND name = $2;",
-		s.project.id, substringBefore(branch, buildTypeSeparator)).Scan(&buildTypeId, &allowsPromotion)
+		s.project.id, buildType).Scan(&buildTypeId, &allowsPromotion)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return downloads.BadRequest("Unknown build type", err)
@@ -112,18 +117,15 @@ func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []by
 	// Attempt to find parent commit
 	if buildTypeId > 0 {
 		var parentCommit string
-		s.tx.QueryRow("SELECT commit FROM downloads WHERE build_type_id = $1 ORDER BY published DESC LIMIT 1;",
-			buildTypeId).Scan(&parentCommit)
+		s.tx.QueryRow("SELECT commit FROM downloads "+
+			"WHERE project_id = $1 AND build_type_id = $2 ORDER BY published DESC LIMIT 1;",
+			s.project.id, buildTypeId).Scan(&parentCommit)
 
 		if parentCommit != "" {
 			// Parent commit found, generate changelog
 			changelog, err = i.generateChangelog(s.project, commit, parentCommit)
 			if err != nil {
-				if requireChangelog {
-					return err
-				} else {
-					i.Log.Println("Failed to generate changelog for", s.version, ':', err)
-				}
+				return err
 			}
 		}
 	}
@@ -166,6 +168,11 @@ func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []by
 }
 
 func (i *Indexer) generateChangelog(p *project, commit string, parentCommit string) (string, error) {
+	if commit == parentCommit {
+		// No changes
+		return emptyChangelog, nil
+	}
+
 	// Generate changelog
 	repo, err := i.git.OpenGitHub(p.githubOwner, p.githubRepo)
 	if err != nil {

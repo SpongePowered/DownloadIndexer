@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"reflect"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +26,9 @@ const (
 	sessionSecretLength = 32
 	sessionTimeout      = 5 * time.Minute
 )
+
+var semVerPattern = regexp.MustCompile(
+	`(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[\dA-Za-z-]+(?:\.[\dA-Za-z-]+)*)?(?:\+[\dA-Za-z-]+(?:\.[\dA-Za-z-]+)*)?(-SNAPSHOT)?`)
 
 type Indexer struct {
 	*downloads.Module
@@ -51,6 +55,7 @@ type project struct {
 	githubRepo  string
 
 	useSnapshots bool
+	useSemVer    bool
 
 	metadata            *metadata
 	versionMetadata     map[string]*metadata
@@ -95,7 +100,7 @@ func Create(m *downloads.Manager, repo maven.Repository, git *git.Manager) *Inde
 
 func (i *Indexer) LoadProjects() error {
 	rows, err := i.DB.Query("SELECT project_id, group_id, artifact_id, plugin_id, github_owner, github_repo, " +
-		"use_snapshots FROM projects;")
+		"use_snapshots, use_semver FROM projects;")
 	if err != nil {
 		return err
 	}
@@ -105,7 +110,7 @@ func (i *Indexer) LoadProjects() error {
 		project := &project{metadata: new(metadata), versionMetadata: make(map[string]*metadata)}
 
 		err = rows.Scan(&project.id, &identifier.GroupID, &identifier.ArtifactID, &project.pluginID,
-			&project.githubOwner, &project.githubRepo, &project.useSnapshots)
+			&project.githubOwner, &project.githubRepo, &project.useSnapshots, &project.useSemVer)
 		if err != nil {
 			return err
 		}
@@ -257,16 +262,12 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 
 			if main {
 				// Override query params (e.g. to index older builds)
-				requireChangelog := true
-				var branch string
+				var buildType, branch string
 				var metadataBytes []byte
 				var published time.Time
 
 				if macaron.Env == macaron.DEV {
-					// Only allow overriding in development environment
-					requireChangelog = ctx.QueryBool("requireChangelog")
-
-					branch = ctx.Query("branch")
+					buildType, branch = ctx.Query("type"), ctx.Query("branch")
 
 					if metadataSize := ctx.QueryInt("mcmodMetadataSize"); metadataSize > 0 {
 						metadataBytes = data[:metadataSize]
@@ -281,8 +282,8 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 					}
 				}
 
-				err = s.createDownload(i, p.displayVersion, data, branch, metadataBytes, published,
-					project.useSnapshots && !p.snapshot, requireChangelog)
+				err = s.createDownload(i, p.displayVersion, data, buildType, branch, metadataBytes, published,
+					project.useSnapshots && !p.snapshot)
 				if err != nil {
 					return err
 				}
@@ -384,6 +385,10 @@ func (i *Indexer) getOrCreateSession(ctx *macaron.Context, project *project, ver
 	s, err := i.requireSession(ctx, project, version)
 	if s != nil {
 		return s, err
+	}
+
+	if project.useSemVer && !semVerPattern.MatchString(version) {
+		return nil, downloads.BadRequest("Version does not match semantic versioning specifications", nil)
 	}
 
 	sessionID := string(com.RandomCreateBytes(sessionSecretLength))

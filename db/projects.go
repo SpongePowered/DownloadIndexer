@@ -14,19 +14,19 @@ func setupProjects(db *sql.DB) error {
 	}
 
 	err = setupProject(db, "SpongeVanilla", "org.spongepowered", "spongevanilla", "sponge", "SpongePowered", "SpongeVanilla",
-		false, stable, bleeding)
+		false, false, stable, bleeding)
 	if err != nil {
 		return err
 	}
 
 	err = setupProject(db, "SpongeForge", "org.spongepowered", "spongeforge", "sponge", "SpongePowered", "SpongeForge",
-		false, stable, bleeding)
+		false, false, stable, bleeding)
 	if err != nil {
 		return err
 	}
 
 	err = setupProject(db, "SpongeAPI", "org.spongepowered", "spongeapi", "spongeapi", "SpongePowered", "SpongeAPI",
-		true, stable, bleeding)
+		true, true, stable, bleeding)
 	if err != nil {
 		return err
 	}
@@ -40,10 +40,12 @@ func setupBuildType(db *sql.DB, name string, allowsPromotion bool) (b int, err e
 	return
 }
 
-func setupProject(db *sql.DB, name, groupId, artifactId, pluginID, githubOwner, githubRepo string, snapshots bool, buildTypes ...int) error {
+func setupProject(db *sql.DB, name, groupId, artifactId, pluginID, githubOwner, githubRepo string, snapshots bool,
+	semver bool, buildTypes ...int) error {
+
 	var projectID int
-	err := db.QueryRow("INSERT INTO projects VALUES (DEFAULT, $1, $2, $3, $4, $5, $6, $7) RETURNING project_id;",
-		name, groupId, artifactId, ToNullString(pluginID), githubOwner, githubRepo, snapshots).Scan(&projectID)
+	err := db.QueryRow("INSERT INTO projects VALUES (DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8) RETURNING project_id;",
+		name, groupId, artifactId, ToNullString(pluginID), githubOwner, githubRepo, snapshots, semver).Scan(&projectID)
 	if err != nil {
 		return err
 	}

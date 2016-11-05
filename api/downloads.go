@@ -193,7 +193,8 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error
 
 		dl := downloadsMap[downloadID]
 
-		artifact.URL = urlPrefix + dl.Version + "/" + project.ArtifactID + "-" + defaultWhenNil(dl.mavenVersion, dl.Version)
+		artifact.URL = urlPrefix + defaultWhenNil(dl.mavenVersion, dl.Version) + "/" +
+			project.ArtifactID + "-" + dl.Version
 
 		if classifier != "" {
 			artifact.URL += "-" + classifier
