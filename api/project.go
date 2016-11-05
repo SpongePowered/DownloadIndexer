@@ -11,8 +11,6 @@ import (
 )
 
 type project struct {
-	maven.Identifier
-
 	Name     string `json:"name"`
 	PluginID string `json:"pluginId"`
 
@@ -25,15 +23,19 @@ type project struct {
 
 	Versions     versions            `json:"versions,omitempty"`
 	Dependencies map[string]versions `json:"dependencies,omitempty"`
-
-	Snapshots bool `json:"snapshots"`
 }
 
 type buildType struct {
-	id               int
-	latestDownloadID int
+	id int
 
-	Dependencies map[string]string `json:"dependencies"`
+	Latest *build `json:"latest,omitempty"`
+}
+
+type build struct {
+	id int
+
+	Version      string            `json:"version"`
+	Dependencies map[string]string `json:"dependencies,omitempty"`
 }
 
 func (a *API) GetProject(ctx *macaron.Context, c maven.Identifier) error {
@@ -41,9 +43,9 @@ func (a *API) GetProject(ctx *macaron.Context, c maven.Identifier) error {
 	var projectID int
 	var useSemVer bool
 
-	err := a.DB.QueryRow("SELECT * FROM projects WHERE group_id = $1 AND artifact_id = $2;",
-		c.GroupID, c.ArtifactID).Scan(&projectID, &p.Name, &p.GroupID, &p.ArtifactID, &p.PluginID,
-		&p.GitHub.Owner, &p.GitHub.Repo, &p.Snapshots, &useSemVer)
+	err := a.DB.QueryRow("SELECT project_id, name, plugin_id, github_owner, github_repo, use_semver FROM projects "+
+		"WHERE group_id = $1 AND artifact_id = $2;",
+		c.GroupID, c.ArtifactID).Scan(&projectID, &p.Name, &p.PluginID, &p.GitHub.Owner, &p.GitHub.Repo, &useSemVer)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return downloads.NotFound("Unknown project")
@@ -59,7 +61,7 @@ func (a *API) GetProject(ctx *macaron.Context, c maven.Identifier) error {
 	}
 
 	for rows.Next() {
-		bt := &buildType{Dependencies: make(map[string]string)}
+		bt := new(buildType)
 		var name string
 		err = rows.Scan(&bt.id, &name)
 		if err != nil {
@@ -70,7 +72,7 @@ func (a *API) GetProject(ctx *macaron.Context, c maven.Identifier) error {
 	}
 
 	// Get latest download for each build type
-	rows, err = a.DB.Query("SELECT build_type_id, download_id FROM downloads "+
+	rows, err = a.DB.Query("SELECT build_type_id, download_id, version FROM downloads "+
 		"WHERE (build_type_id, published) IN ("+
 		"SELECT build_type_id, MAX(published) FROM downloads "+
 		"WHERE project_id = $1 GROUP BY build_type_id"+
@@ -84,14 +86,20 @@ func (a *API) GetProject(ctx *macaron.Context, c maven.Identifier) error {
 rows:
 	for rows.Next() {
 		var buildTypeID, downloadID int
-		err = rows.Scan(&buildTypeID, &downloadID)
+		var version string
+		err = rows.Scan(&buildTypeID, &downloadID, &version)
 		if err != nil {
 			return downloads.InternalError("Database error (failed to read latest download)", err)
 		}
 
 		for _, bt := range p.BuildTypes {
 			if bt.id == buildTypeID {
-				bt.latestDownloadID = downloadID
+				bt.Latest = &build{
+					id:           downloadID,
+					Version:      version,
+					Dependencies: make(map[string]string),
+				}
+
 				downloadIDs = append(downloadIDs, int64(downloadID))
 				continue rows
 			}
@@ -115,8 +123,8 @@ rows:
 		}
 
 		for _, bt := range p.BuildTypes {
-			if bt.latestDownloadID == downloadID {
-				bt.Dependencies[name] = version
+			if bt.Latest != nil && bt.Latest.id == downloadID {
+				bt.Latest.Dependencies[name] = version
 			}
 		}
 	}

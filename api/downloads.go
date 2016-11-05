@@ -39,10 +39,11 @@ type artifact struct {
 
 func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error {
 	var projectID int
+	var useSemVer bool
 
 	// Lookup project
-	err := a.DB.QueryRow("SELECT project_id FROM projects WHERE group_id = $1 AND artifact_id = $2;",
-		project.GroupID, project.ArtifactID).Scan(&projectID)
+	err := a.DB.QueryRow("SELECT project_id, use_semver FROM projects WHERE group_id = $1 AND artifact_id = $2;",
+		project.GroupID, project.ArtifactID).Scan(&projectID, &useSemVer)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return downloads.NotFound("Unknown project")
@@ -77,12 +78,20 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error
 		limit = 100
 	}
 
+	version := ctx.Query("version")
 	since := ctx.Query("since")
 	until := ctx.Query("until")
 	_, changelog := ctx.Req.Form["changelog"]
 
-	builder := db.NewSQLBuilder("SELECT download_id, build_types.name, downloads.version, maven_version, " +
-		"published, commit, label")
+	builder := db.NewSQLBuilder()
+
+	// If since is defined we need an extra outer query to order the rows DESC
+	// (We need ASC to limit the results correctly)
+	if since != "" {
+		builder.Append("SELECT * FROM (")
+	}
+
+	builder.Append("SELECT download_id, build_types.name, downloads.version, maven_version, published, commit, label")
 
 	if changelog {
 		builder.Append(", changelog")
@@ -108,12 +117,38 @@ func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error
 		builder.Parameter(" AND published < ", until)
 	}
 
+	// Version filter is only supported for projects with semantic versioning
+	if useSemVer && version != "" {
+		version = strings.Trim(version, "%_")
+
+		if strings.Count(version, ".") < 3 {
+			version += "."
+		}
+
+		version += "%"
+		builder.Parameter(" AND version LIKE ", version)
+	}
+
 	for _, dep := range dependencies {
 		builder.Parameter(" AND dependencies.name = ", dep[0])
 		builder.Parameter(" AND dependencies.version = ", dep[1])
 	}
 
-	builder.Parameter(" ORDER BY published DESC LIMIT ", limit)
+	builder.Append(" ORDER BY published ")
+
+	if since == "" {
+		builder.Append("DESC ")
+	} else {
+		builder.Append("ASC ")
+	}
+
+	builder.Parameter("LIMIT ", limit)
+
+	if since != "" {
+		// Finish outer query
+		builder.Append(") AS d ORDER BY published DESC;")
+	}
+
 	builder.End()
 
 	rows, err = a.DB.Query(builder.String(), builder.Args()...)

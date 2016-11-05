@@ -22,8 +22,8 @@ type SQLBuilder struct {
 	args []interface{}
 }
 
-func NewSQLBuilder(sql string) *SQLBuilder {
-	return &SQLBuilder{buffer: bytes.NewBufferString(sql)}
+func NewSQLBuilder() *SQLBuilder {
+	return &SQLBuilder{buffer: new(bytes.Buffer)}
 }
 
 func (b *SQLBuilder) Append(sql string) {
