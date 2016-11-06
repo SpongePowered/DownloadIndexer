@@ -28,7 +28,10 @@ type project struct {
 type buildType struct {
 	id int
 
-	Latest *build `json:"latest,omitempty"`
+	Latest      *build `json:"latest,omitempty"`
+	Recommended *build `json:"recommended,omitempty"`
+
+	AllowsPromotion bool `json:"allowsPromotion"`
 }
 
 type build struct {
@@ -54,7 +57,7 @@ func (a *API) GetProject(ctx *macaron.Context, c maven.Identifier) error {
 	}
 
 	// Get build types
-	rows, err := a.DB.Query("SELECT build_type_id, name FROM build_types "+
+	rows, err := a.DB.Query("SELECT build_type_id, name, allows_promotion FROM build_types "+
 		"JOIN project_build_types USING(build_type_id) WHERE project_id = $1;", projectID)
 	if err != nil {
 		return downloads.InternalError("Database error (failed to lookup build types)", err)
@@ -63,7 +66,7 @@ func (a *API) GetProject(ctx *macaron.Context, c maven.Identifier) error {
 	for rows.Next() {
 		bt := new(buildType)
 		var name string
-		err = rows.Scan(&bt.id, &name)
+		err = rows.Scan(&bt.id, &name, &bt.AllowsPromotion)
 		if err != nil {
 			return downloads.InternalError("Database error (failed to read build type)", err)
 		}
@@ -72,11 +75,11 @@ func (a *API) GetProject(ctx *macaron.Context, c maven.Identifier) error {
 	}
 
 	// Get latest download for each build type
-	rows, err = a.DB.Query("SELECT build_type_id, download_id, version FROM downloads "+
-		"WHERE (build_type_id, published) IN ("+
-		"SELECT build_type_id, MAX(published) FROM downloads "+
-		"WHERE project_id = $1 GROUP BY build_type_id"+
-		");", projectID)
+	rows, err = a.DB.Query("SELECT build_type_id, label, download_id, version FROM downloads "+
+		"WHERE (build_type_id, coalesce(label, ''), published) IN ("+
+		"SELECT build_type_id, coalesce(label, ''), MAX(published) FROM downloads "+
+		"WHERE project_id = $1 GROUP BY build_type_id, label)"+
+		"ORDER BY published DESC;", projectID)
 	if err != nil {
 		return downloads.InternalError("Database error (failed to get latest downloads)", err)
 	}
@@ -87,17 +90,30 @@ rows:
 	for rows.Next() {
 		var buildTypeID, downloadID int
 		var version string
-		err = rows.Scan(&buildTypeID, &downloadID, &version)
+		var label *string
+
+		err = rows.Scan(&buildTypeID, &label, &downloadID, &version)
 		if err != nil {
 			return downloads.InternalError("Database error (failed to read latest download)", err)
 		}
 
 		for _, bt := range p.BuildTypes {
 			if bt.id == buildTypeID {
-				bt.Latest = &build{
+				build := &build{
 					id:           downloadID,
 					Version:      version,
 					Dependencies: make(map[string]string),
+				}
+
+				if label == nil {
+					if bt.Latest == nil {
+						bt.Latest = build
+					}
+				} else if *label == "recommended" {
+					bt.Recommended = build
+					if bt.Latest == nil {
+						bt.Latest = build // Use recommended as fallback for latest
+					}
 				}
 
 				downloadIDs = append(downloadIDs, int64(downloadID))
@@ -123,8 +139,11 @@ rows:
 		}
 
 		for _, bt := range p.BuildTypes {
-			if bt.Latest != nil && bt.Latest.id == downloadID {
+			switch {
+			case bt.Latest != nil && bt.Latest.id == downloadID:
 				bt.Latest.Dependencies[name] = version
+			case bt.Recommended != nil && bt.Recommended.id == downloadID:
+				bt.Recommended.Dependencies[name] = version
 			}
 		}
 	}

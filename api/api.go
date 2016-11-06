@@ -25,6 +25,8 @@ func (a *API) Setup(m *macaron.Macaron) {
 	m.Group("/api/v1/:groupId/:artifactId", func() {
 		m.Get("/", a.GetProject)
 		m.Get("/downloads", a.GetDownloads)
+		m.Get("/downloads/:version", a.GetDownload)
+		m.Get("/downloads/recommended", a.GetRecommendedDownload)
 	},
 		a.InitializeContext,
 		macaron.Recovery(),
