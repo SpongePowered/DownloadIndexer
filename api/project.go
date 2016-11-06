@@ -30,8 +30,6 @@ type buildType struct {
 
 	Latest      *build `json:"latest,omitempty"`
 	Recommended *build `json:"recommended,omitempty"`
-
-	AllowsPromotion bool `json:"allowsPromotion"`
 }
 
 type build struct {
@@ -57,7 +55,7 @@ func (a *API) GetProject(ctx *macaron.Context, c maven.Identifier) error {
 	}
 
 	// Get build types
-	rows, err := a.DB.Query("SELECT build_type_id, name, allows_promotion FROM build_types "+
+	rows, err := a.DB.Query("SELECT build_type_id, name FROM build_types "+
 		"JOIN project_build_types USING(build_type_id) WHERE project_id = $1;", projectID)
 	if err != nil {
 		return downloads.InternalError("Database error (failed to lookup build types)", err)
@@ -66,7 +64,7 @@ func (a *API) GetProject(ctx *macaron.Context, c maven.Identifier) error {
 	for rows.Next() {
 		bt := new(buildType)
 		var name string
-		err = rows.Scan(&bt.id, &name, &bt.AllowsPromotion)
+		err = rows.Scan(&bt.id, &name)
 		if err != nil {
 			return downloads.InternalError("Database error (failed to read build type)", err)
 		}
