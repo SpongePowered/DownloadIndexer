@@ -19,12 +19,12 @@ var emptyArray [0]struct{}
 var emptyMap = map[string]struct{}{}
 
 type download struct {
-	Version      string `json:"version"`
-	mavenVersion *string
-	Published    time.Time `json:"published"`
-	Type         string    `json:"type"`
-	Commit       string    `json:"commit"`
-	Label        *string   `json:"label,omitempty"`
+	Version         string `json:"version"`
+	snapshotVersion *string
+	Published       time.Time `json:"published"`
+	Type            string    `json:"type"`
+	Commit          string    `json:"commit"`
+	Label           *string   `json:"label,omitempty"`
 
 	Dependencies map[string]string    `json:"dependencies,omitempty"`
 	Artifacts    map[string]*artifact `json:"artifacts"`
@@ -119,7 +119,7 @@ func (a *API) createDownloadQuery(project maven.Identifier) (*downloadQuery, err
 }
 
 func (q *downloadQuery) init(dependencies bool) {
-	q.builder.Append("SELECT download_id, build_types.name, downloads.version, maven_version, published, commit, label")
+	q.builder.Append("SELECT download_id, build_types.name, downloads.version, snapshot_version, published, commit, label")
 
 	if q.changelog {
 		q.builder.Append(", changelog")
@@ -261,10 +261,10 @@ func (q *downloadQuery) Read(a *API, project maven.Identifier) ([]*download, err
 		var changelogJSON []byte
 
 		if q.changelog {
-			err = rows.Scan(&id, &dl.Type, &dl.Version, &dl.mavenVersion, &dl.Published, &dl.Commit, &dl.Label,
+			err = rows.Scan(&id, &dl.Type, &dl.Version, &dl.snapshotVersion, &dl.Published, &dl.Commit, &dl.Label,
 				&changelogJSON)
 		} else {
-			err = rows.Scan(&id, &dl.Type, &dl.Version, &dl.mavenVersion, &dl.Published, &dl.Commit, &dl.Label)
+			err = rows.Scan(&id, &dl.Type, &dl.Version, &dl.snapshotVersion, &dl.Published, &dl.Commit, &dl.Label)
 		}
 
 		if err != nil {
@@ -322,7 +322,7 @@ func (q *downloadQuery) Read(a *API, project maven.Identifier) ([]*download, err
 
 		dl := downloadsMap[downloadID]
 
-		artifact.URL = urlPrefix + defaultWhenNil(dl.mavenVersion, dl.Version) + "/" +
+		artifact.URL = urlPrefix + defaultWhenNil(dl.snapshotVersion, dl.Version) + "/" +
 			project.ArtifactID + "-" + dl.Version
 
 		if classifier != "" {

@@ -135,14 +135,14 @@ func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []by
 		label = recommendedLabel
 	}
 
-	mavenVersion := s.version
-	if mavenVersion == displayVersion {
-		mavenVersion = ""
+	snapshotVersion := s.version
+	if snapshotVersion == displayVersion {
+		snapshotVersion = ""
 	}
 
 	err = s.tx.QueryRow("INSERT INTO downloads VALUES (DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9) "+
 		"RETURNING download_id;",
-		s.project.id, buildTypeId, displayVersion, db.ToNullString(mavenVersion), published, branch, commit,
+		s.project.id, buildTypeId, displayVersion, db.ToNullString(snapshotVersion), published, branch, commit,
 		db.ToNullString(label), db.ToNullString(changelog)).Scan(&s.downloadID)
 	if err != nil {
 		return downloads.InternalError("Database error (failed to add download)", err)

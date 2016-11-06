@@ -40,7 +40,7 @@ func createTables(db *sql.DB) error {
 			build_type_id INT NOT NULL REFERENCES build_types ON DELETE RESTRICT ON UPDATE CASCADE,
 
 			version TEXT NOT NULL,
-			maven_version TEXT,
+			snapshot_version TEXT,
 			published TIMESTAMP(0) WITH TIME ZONE NOT NULL,
 
 			branch TEXT NOT NULL,
