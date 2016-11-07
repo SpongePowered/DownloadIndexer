@@ -21,7 +21,7 @@ func Create(m *downloads.Manager, repo string) *API {
 	return &API{m.Module("API"), repo}
 }
 
-func (a *API) Setup(m *macaron.Macaron) {
+func (a *API) Setup(m *macaron.Macaron, renderer macaron.Handler) {
 	m.Group("/api/v1/:groupId/:artifactId", func() {
 		m.Get("/", a.GetProject)
 		m.Get("/downloads", a.GetDownloads)
@@ -32,7 +32,7 @@ func (a *API) Setup(m *macaron.Macaron) {
 		macaron.Recovery(),
 		AddHeaders,
 		ParseIdentifier,
-		macaron.Renderer(macaron.RenderOptions{IndentJSON: macaron.Env == macaron.DEV}))
+		renderer)
 }
 
 func AddHeaders(ctx *macaron.Context) {

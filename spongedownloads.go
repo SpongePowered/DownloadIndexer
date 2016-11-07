@@ -29,12 +29,18 @@ func main() {
 	m.Use(macaron.Logger())
 	m.Map(downloads.ErrorHandler())
 
+	renderer := macaron.Renderer(macaron.RenderOptions{IndentJSON: macaron.Env == macaron.DEV})
+
+	if statusz := statuszHandler(); statusz != nil {
+		m.Get("/statusz", renderer, statusz)
+	}
+
 	if enableIndexer {
 		setupIndexer(manager, m)
 	}
 
 	if enableAPI {
-		setupAPI(manager, m)
+		setupAPI(manager, m, renderer)
 	}
 
 	if enablePromote {
