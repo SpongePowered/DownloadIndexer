@@ -15,6 +15,9 @@ SpongeDownloads uses the following environment variables:
 - `POSTGRES_URL`: URL to PostgreSQL database instance
   - `postgres://postgres@localhost/downloads?sslmode=disable`
 
+- **Optional**: `REDIRECT_ROOT` to redirect all requests to `/` to another URL
+  - `https://www.spongepowered.org/#downloads`
+
 - **Indexer**:
   - `UPLOAD_URL`: URL to Maven repository where the artifacts will be stored, e.g.:
     - `http://user:password@repo.example.com/maven`

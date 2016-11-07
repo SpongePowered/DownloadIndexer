@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"net/http"
 )
 
 var logger = log.New(os.Stdout, "[Main] ", log.LstdFlags)
@@ -33,6 +34,12 @@ func main() {
 	m.Map(downloads.ErrorHandler())
 
 	renderer := macaron.Renderer(macaron.RenderOptions{IndentJSON: macaron.Env == macaron.DEV})
+
+	if redirectRoot := os.Getenv("REDIRECT_ROOT"); redirectRoot != "" {
+		m.Get("/", func (ctx *macaron.Context) {
+			ctx.Redirect(redirectRoot, http.StatusMovedPermanently)
+		})
+	}
 
 	if statusz := statuszHandler(); statusz != nil {
 		m.Get("/statusz", renderer, statusz)
