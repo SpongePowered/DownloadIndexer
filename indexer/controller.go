@@ -101,6 +101,8 @@ func Create(m *downloads.Manager, repo maven.Repository, git *git.Manager) *Inde
 }
 
 func (i *Indexer) LoadProjects() error {
+	i.Log.Println("Loading projects")
+
 	rows, err := i.DB.Query("SELECT project_id, group_id, artifact_id, plugin_id, github_owner, github_repo, " +
 		"use_snapshots, use_semver FROM projects;")
 	if err != nil {

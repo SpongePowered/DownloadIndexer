@@ -11,11 +11,14 @@ import (
 	"strings"
 )
 
+var logger = log.New(os.Stdout, "[Main] ", log.LstdFlags)
+
 func main() {
 	// Parse module configuration
 	enableIndexer, enableAPI, enablePromote := true, true, true
 
 	if modules := parseModules("MODULES"); modules != nil {
+		logger.Println("Enabled modules:", modules)
 		enableIndexer = modules.isEnabled("indexer")
 		enableAPI = modules.isEnabled("api")
 		enablePromote = modules.isEnabled("promote")
@@ -36,10 +39,12 @@ func main() {
 	}
 
 	if enableIndexer {
+		logger.Println("Starting indexer")
 		setupIndexer(manager, m)
 	}
 
 	if enableAPI {
+		logger.Println("Starting API")
 		setupAPI(manager, m, renderer)
 	}
 
@@ -51,6 +56,8 @@ func main() {
 }
 
 func setupDatabase() *sql.DB {
+	logger.Println("Connecting to database")
+
 	postgresDB, err := db.ConnectPostgres(requireEnv("POSTGRES_URL"))
 	if err != nil {
 		log.Fatalln(err)
