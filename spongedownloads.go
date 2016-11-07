@@ -5,11 +5,12 @@ import (
 	"github.com/Minecrell/SpongeDownloads/auth"
 	"github.com/Minecrell/SpongeDownloads/db"
 	"github.com/Minecrell/SpongeDownloads/downloads"
+	"github.com/go-macaron/gzip"
 	"gopkg.in/macaron.v1"
 	"log"
+	"net/http"
 	"os"
 	"strings"
-	"net/http"
 )
 
 var logger = log.New(os.Stdout, "[Main] ", log.LstdFlags)
@@ -31,12 +32,13 @@ func main() {
 	// Initialize web framework
 	m := macaron.New()
 	m.Use(macaron.Logger())
+	m.Use(gzip.Gziper())
 	m.Map(downloads.ErrorHandler())
 
 	renderer := macaron.Renderer(macaron.RenderOptions{IndentJSON: macaron.Env == macaron.DEV})
 
 	if redirectRoot := os.Getenv("REDIRECT_ROOT"); redirectRoot != "" {
-		m.Get("/", func (ctx *macaron.Context) {
+		m.Get("/", func(ctx *macaron.Context) {
 			ctx.Redirect(redirectRoot, http.StatusMovedPermanently)
 		})
 	}
