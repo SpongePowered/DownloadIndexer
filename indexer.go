@@ -9,7 +9,8 @@ import (
 	"log"
 )
 
-func setupIndexer(manager *downloads.Manager, m *macaron.Macaron, auth macaron.Handler) {
+func setupIndexer(manager *downloads.Manager, m *macaron.Macaron) {
+	authHandler := setupAuthentication("UPLOAD_AUTH")
 	uploadURL := requireEnv("UPLOAD_URL")
 	gitStorage := requireEnv("GIT_STORAGE_DIR")
 
@@ -32,5 +33,5 @@ func setupIndexer(manager *downloads.Manager, m *macaron.Macaron, auth macaron.H
 		log.Fatalln(err)
 	}
 
-	i.Setup(m, auth)
+	i.Setup(m, authHandler)
 }

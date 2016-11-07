@@ -29,10 +29,8 @@ func main() {
 	m.Use(macaron.Logger())
 	m.Map(downloads.ErrorHandler())
 
-	authHandler := setupAuthentication("API_AUTH")
-
 	if enableIndexer {
-		setupIndexer(manager, m, authHandler)
+		setupIndexer(manager, m)
 	}
 
 	if enableAPI {
