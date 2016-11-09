@@ -22,7 +22,7 @@ func Create(m *downloads.Manager, repo string) *API {
 }
 
 func (a *API) Setup(m *macaron.Macaron, renderer macaron.Handler) {
-	m.Group("/api/v1", func() {
+	m.Group("/v1", func() {
 		m.Get("/projects", a.GetProjects)
 
 		m.Group("/:groupId/:artifactId", func() {
