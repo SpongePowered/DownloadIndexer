@@ -6,7 +6,6 @@ import (
 	"github.com/Minecrell/SpongeDownloads/indexer"
 	"github.com/Minecrell/SpongeDownloads/maven"
 	"gopkg.in/macaron.v1"
-	"log"
 )
 
 func setupIndexer(manager *downloads.Manager, m *macaron.Macaron) {
@@ -17,20 +16,20 @@ func setupIndexer(manager *downloads.Manager, m *macaron.Macaron) {
 	// Setup upload Maven repository
 	repo, err := maven.CreateRepository(uploadURL)
 	if err != nil {
-		log.Fatalln(err)
+		logger.Fatalln(err)
 	}
 
 	// Initialize Git manager
 	gitManager, err := git.Create(manager, gitStorage)
 	if err != nil {
-		log.Fatalln(err)
+		logger.Fatalln(err)
 	}
 
 	// Initialize indexer and API
 	i := indexer.Create(manager, repo, gitManager)
 	err = i.LoadProjects()
 	if err != nil {
-		log.Fatalln(err)
+		logger.Fatalln(err)
 	}
 
 	i.Setup(m, authHandler)

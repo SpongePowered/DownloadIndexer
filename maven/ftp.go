@@ -1,7 +1,7 @@
 package maven
 
 import (
-	"github.com/Minecrell/SpongeDownloads/downloads"
+	"github.com/Minecrell/SpongeDownloads/httperror"
 	"github.com/secsy/goftp"
 	"io"
 	"net/http"
@@ -56,7 +56,7 @@ func (repo *ftpRepository) Download(path string, writer io.Writer) error {
 		}
 	}
 
-	return downloads.Error(code, "Failed to download file", err)
+	return httperror.New(code, "Failed to download file", err)
 }
 
 func (repo *ftpRepository) Upload(path string, reader io.Reader) error {
@@ -69,7 +69,7 @@ func (repo *ftpRepository) Upload(path string, reader io.Reader) error {
 		return nil
 	}
 
-	return downloads.Error(http.StatusBadGateway, "Failed to upload file", err)
+	return httperror.New(http.StatusBadGateway, "Failed to upload file", err)
 }
 
 func (ftp *ftpRepository) createPath(path string) {

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"github.com/Minecrell/SpongeDownloads/downloads"
 	"github.com/Minecrell/SpongeDownloads/git"
+	"github.com/Minecrell/SpongeDownloads/httperror"
 	"github.com/Minecrell/SpongeDownloads/maven"
 	"github.com/Unknwon/com"
 	"gopkg.in/macaron.v1"
@@ -141,12 +142,12 @@ func (i *Indexer) Get(ctx *macaron.Context) error {
 
 	p, err := parsePath(path, false)
 	if err != nil {
-		return downloads.BadRequest("Invalid path", err)
+		return httperror.BadRequest("Invalid path", err)
 	}
 
 	// The uploader should only download the metadata from the indexer
 	if !p.metadata {
-		return downloads.Forbidden("Can only download maven metadata")
+		return httperror.Forbidden("Can only download maven metadata")
 	}
 
 	project := i.projects[p.Identifier]
@@ -171,13 +172,13 @@ func (i *Indexer) Get(ctx *macaron.Context) error {
 
 		meta = project.getOrCreateVersionMetadata(p.version)
 	} else {
-		return downloads.BadRequest("Project does not use snapshots", nil)
+		return httperror.BadRequest("Project does not use snapshots", nil)
 	}
 
 	defer s.unlock()
 
 	if s.failed {
-		return downloads.Error(httpStatusFailedDependency, "Previous request failed", nil)
+		return httperror.New(httpStatusFailedDependency, "Previous request failed", nil)
 	}
 
 	if p.t == file && meta.session != s.id {
@@ -196,18 +197,18 @@ func (i *Indexer) Get(ctx *macaron.Context) error {
 
 func (i *Indexer) Put(ctx *macaron.Context) error {
 	if ctx.Req.ContentLength <= 0 {
-		return downloads.Error(http.StatusLengthRequired, "Missing content length", nil)
+		return httperror.New(http.StatusLengthRequired, "Missing content length", nil)
 	}
 
 	if ctx.Req.ContentLength > maxFileSize {
-		return downloads.BadRequest("File exceeds maximal file size", nil)
+		return httperror.BadRequest("File exceeds maximal file size", nil)
 	}
 
 	path := ctx.Params("*")
 
 	p, err := parsePath(path, true)
 	if err != nil {
-		return downloads.BadRequest("Invalid path", err)
+		return httperror.BadRequest("Invalid path", err)
 	}
 
 	project := i.projects[p.Identifier]
@@ -216,7 +217,7 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 	}
 
 	if p.snapshot && !project.useSnapshots {
-		return downloads.BadRequest("Project does not use snapshots", nil)
+		return httperror.BadRequest("Project does not use snapshots", nil)
 	}
 
 	main := p.artifact.classifier == "" && p.artifact.extension == jarExtension
@@ -237,14 +238,14 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 	defer s.unlock()
 
 	if s.failed {
-		return downloads.Error(httpStatusFailedDependency, "Previous request failed", nil)
+		return httperror.New(httpStatusFailedDependency, "Previous request failed", nil)
 	}
 
 	// Read file from request body (with the specified length)
 	data := make([]byte, ctx.Req.ContentLength)
 	_, err = io.ReadFull(ctx.Req.Body().ReadCloser(), data)
 	if err != nil {
-		return downloads.BadRequest("Failed to read input", err)
+		return httperror.BadRequest("Failed to read input", err)
 	}
 
 	// TODO: Error when file is longer than specified?
@@ -261,7 +262,7 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 		switch p.t {
 		case file:
 			if a.uploaded {
-				return downloads.Error(http.StatusConflict, "Artifact already uploaded", nil)
+				return httperror.New(http.StatusConflict, "Artifact already uploaded", nil)
 			}
 
 			if main {
@@ -281,7 +282,7 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 					if publishedString := ctx.Query("published"); publishedString != "" {
 						published, err = time.Parse(time.RFC3339, publishedString)
 						if err != nil {
-							return downloads.BadRequest("Failed to parse published date", err)
+							return httperror.BadRequest("Failed to parse published date", err)
 						}
 					}
 				}
@@ -292,7 +293,7 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 					return err
 				}
 			} else if s.downloadID == 0 {
-				return downloads.BadRequest("Must upload main artifact first", nil)
+				return httperror.BadRequest("Must upload main artifact first", nil)
 			}
 
 			// TODO: Currently only JARs are indexed, all other artifacts only verified
@@ -319,7 +320,7 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 		}
 
 		if meta == nil || meta.session != s.id {
-			return downloads.Forbidden("Cannot modify metadata without a lock")
+			return httperror.Forbidden("Cannot modify metadata without a lock")
 		}
 
 		meta.unlock()
@@ -338,6 +339,26 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 			}
 
 			s.tx = nil
+
+			go func() {
+				// Attempt to update project timestamp
+				_, err := i.DB.Exec("UPDATE projects SET last_updated = current_timestamp WHERE project_id = $1;", s.project.id)
+				if err != nil {
+					i.Log.Println("Failed to update project timestamp:", err)
+				}
+			}()
+
+			if i.Cache != nil {
+				go func() {
+					// Purge cache
+					err := i.Cache.PurgeProject(p.Identifier)
+					if err != nil {
+						i.Log.Println("Failed to purge project cache:", err)
+					} else {
+						i.Log.Println("Successfully purged cache for project", p.Identifier)
+					}
+				}()
+			}
 
 			// We let the timeout do its work to cleanup the session
 		}
@@ -369,16 +390,16 @@ func (i *Indexer) getSession(id string) *session {
 func (i *Indexer) requireSession(ctx *macaron.Context, project *project, version string) (*session, error) {
 	id := ctx.GetCookie(sessionCookieName)
 	if id == "" {
-		return nil, downloads.Forbidden("Missing session")
+		return nil, httperror.Forbidden("Missing session")
 	}
 
 	s := i.getSession(id)
 	if s == nil {
-		return nil, downloads.Forbidden("Unknown session")
+		return nil, httperror.Forbidden("Unknown session")
 	}
 
 	if s.project != project || (version != "" && s.version != version) {
-		return s, downloads.BadRequest("Invalid session provided", nil)
+		return s, httperror.BadRequest("Invalid session provided", nil)
 	}
 
 	s.lock(ctx)
@@ -392,7 +413,7 @@ func (i *Indexer) getOrCreateSession(ctx *macaron.Context, project *project, ver
 	}
 
 	if project.useSemVer && !semVerPattern.MatchString(version) {
-		return nil, downloads.BadRequest("Version does not match semantic versioning specifications", nil)
+		return nil, httperror.BadRequest("Version does not match semantic versioning specifications", nil)
 	}
 
 	sessionID := string(com.RandomCreateBytes(sessionSecretLength))
@@ -436,7 +457,7 @@ func (s *session) release(i *Indexer) {
 	if s.tx != nil {
 		err := s.tx.Rollback()
 		if err != nil {
-			i.Log.Println("Failed to rollback transaction", err)
+			i.Log.Println("Failed to rollback transaction:", err)
 		}
 
 		s.tx = nil

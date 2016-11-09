@@ -1,14 +1,14 @@
 package maven
 
 import (
-	"github.com/Minecrell/SpongeDownloads/downloads"
+	"github.com/Minecrell/SpongeDownloads/httperror"
 	"io"
 )
 
 type nullRepository struct{}
 
 func (r nullRepository) Download(path string, writer io.Writer) error {
-	return downloads.NotFound(path + " does not exist")
+	return httperror.NotFound(path + " does not exist")
 }
 
 func (r nullRepository) Upload(path string, reader io.Reader) error {

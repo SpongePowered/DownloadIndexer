@@ -1,7 +1,7 @@
 package maven
 
 import (
-	"github.com/Minecrell/SpongeDownloads/downloads"
+	"github.com/Minecrell/SpongeDownloads/httperror"
 	"io"
 	"net/http"
 	"net/url"
@@ -37,7 +37,7 @@ func (repo *httpRepository) runRequest(method string, path string, body io.Reade
 
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
-		err = downloads.Error(http.StatusBadGateway, "Failed to contact upstream server", err)
+		err = httperror.New(http.StatusBadGateway, "Failed to contact upstream server", err)
 	}
 	return
 }
@@ -54,7 +54,7 @@ func (repo *httpRepository) Download(path string, writer io.Writer) error {
 		return nil
 	}
 
-	return downloads.Error(resp.StatusCode, "Failed to download file", nil)
+	return httperror.New(resp.StatusCode, "Failed to download file", nil)
 }
 
 func (repo *httpRepository) Upload(path string, reader io.Reader) error {
@@ -69,5 +69,5 @@ func (repo *httpRepository) Upload(path string, reader io.Reader) error {
 		return nil
 	}
 
-	return downloads.Error(resp.StatusCode, "Failed to upload file", nil)
+	return httperror.New(resp.StatusCode, "Failed to upload file", nil)
 }

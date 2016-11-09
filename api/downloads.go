@@ -3,8 +3,9 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"github.com/Minecrell/SpongeDownloads/db"
-	"github.com/Minecrell/SpongeDownloads/downloads"
+	"github.com/Minecrell/SpongeDownloads/httperror"
 	"github.com/Minecrell/SpongeDownloads/maven"
 	"github.com/lib/pq"
 	"gopkg.in/macaron.v1"
@@ -15,8 +16,12 @@ import (
 
 const recommendedLabel = "recommended"
 
-var emptyArray [0]struct{}
-var emptyMap = map[string]struct{}{}
+var (
+	errNotModified = errors.New("Not modified")
+
+	emptyArray [0]struct{}
+	emptyMap   = map[string]struct{}{}
+)
 
 type download struct {
 	Version         string `json:"version"`
@@ -41,9 +46,13 @@ type artifact struct {
 }
 
 func (a *API) GetDownload(ctx *macaron.Context, project maven.Identifier) error {
-	q, err := a.createDownloadQuery(project)
+	q, err := a.createDownloadQuery(ctx, project)
 	if err != nil {
-		return err
+		if err != errNotModified {
+			return err
+		} else {
+			return nil
+		}
 	}
 
 	q.init(false)
@@ -66,7 +75,11 @@ func (a *API) GetDownload(ctx *macaron.Context, project maven.Identifier) error 
 func (a *API) GetRecommendedDownload(ctx *macaron.Context, project maven.Identifier) error {
 	dls, err := a.filterDownloads(ctx, project, false, recommendedLabel)
 	if err != nil {
-		return err
+		if err != errNotModified {
+			return err
+		} else {
+			return nil
+		}
 	}
 
 	if dls != nil {
@@ -81,7 +94,11 @@ func (a *API) GetRecommendedDownload(ctx *macaron.Context, project maven.Identif
 func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error {
 	dls, err := a.filterDownloads(ctx, project, true, "")
 	if err != nil {
-		return err
+		if err != errNotModified {
+			return err
+		} else {
+			return nil
+		}
 	}
 
 	if dls != nil {
@@ -102,20 +119,33 @@ type downloadQuery struct {
 	builder *db.SQLBuilder
 }
 
-func (a *API) createDownloadQuery(project maven.Identifier) (*downloadQuery, error) {
-	q := &downloadQuery{builder: db.NewSQLBuilder()}
+func (a *API) createDownloadQuery(ctx *macaron.Context, project maven.Identifier) (*downloadQuery, error) {
+	q := new(downloadQuery)
+
+	var lastUpdated time.Time
 
 	// Lookup project
-	err := a.DB.QueryRow("SELECT project_id, use_semver FROM projects WHERE group_id = $1 AND artifact_id = $2;",
-		project.GroupID, project.ArtifactID).Scan(&q.projectID, &q.useSemVer)
+	err := a.DB.QueryRow("SELECT project_id, use_semver, last_updated FROM projects "+
+		"WHERE group_id = $1 AND artifact_id = $2;",
+		project.GroupID, project.ArtifactID).Scan(&q.projectID, &q.useSemVer, &lastUpdated)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, downloads.NotFound("Unknown project")
+			return nil, httperror.NotFound("Unknown project")
 		}
-		return nil, downloads.InternalError("Database error (failed to lookup project)", err)
+		return nil, httperror.InternalError("Database error (failed to lookup project)", err)
 	}
 
-	return q, nil
+	if a.Start.After(lastUpdated) {
+		lastUpdated = a.Start
+	}
+
+	setLastModified(ctx, lastUpdated)
+	if modifiedSince(ctx, lastUpdated) {
+		q.builder = db.NewSQLBuilder()
+		return q, nil
+	} else {
+		return nil, errNotModified // Up-to-date
+	}
 }
 
 func (q *downloadQuery) init(dependencies bool) {
@@ -135,7 +165,7 @@ func (q *downloadQuery) init(dependencies bool) {
 }
 
 func (a *API) filterDownloads(ctx *macaron.Context, project maven.Identifier, extended bool, label string) ([]*download, error) {
-	q, err := a.createDownloadQuery(project)
+	q, err := a.createDownloadQuery(ctx, project)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +183,7 @@ func (a *API) filterDownloads(ctx *macaron.Context, project maven.Identifier, ex
 		"JOIN downloads USING (download_id)"+
 		"WHERE project_id = $1;", q.projectID)
 	if err != nil {
-		return nil, downloads.InternalError("Database error (failed to lookup dependencies)", err)
+		return nil, httperror.InternalError("Database error (failed to lookup dependencies)", err)
 	}
 
 	var dependencies [][2]string
@@ -161,7 +191,7 @@ func (a *API) filterDownloads(ctx *macaron.Context, project maven.Identifier, ex
 		var name string
 		err = rows.Scan(&name)
 		if err != nil {
-			return nil, downloads.InternalError("Database error (failed to read dependency)", err)
+			return nil, httperror.InternalError("Database error (failed to read dependency)", err)
 		}
 
 		if val := ctx.Query(name); val != "" {
@@ -248,7 +278,7 @@ func (q *downloadQuery) Read(a *API, project maven.Identifier) ([]*download, err
 
 	rows, err := a.DB.Query(q.builder.String(), q.builder.Args()...)
 	if err != nil {
-		return nil, downloads.InternalError("Database error (failed to lookup downloads)", err)
+		return nil, httperror.InternalError("Database error (failed to lookup downloads)", err)
 	}
 
 	var downloadIDs []int64
@@ -268,7 +298,7 @@ func (q *downloadQuery) Read(a *API, project maven.Identifier) ([]*download, err
 		}
 
 		if err != nil {
-			return nil, downloads.InternalError("Database error (failed to read downloads)", err)
+			return nil, httperror.InternalError("Database error (failed to read downloads)", err)
 		}
 
 		dl.Changelog = json.RawMessage(changelogJSON)
@@ -287,7 +317,7 @@ func (q *downloadQuery) Read(a *API, project maven.Identifier) ([]*download, err
 	rows, err = a.DB.Query("SELECT download_id, name, version FROM dependencies "+
 		"WHERE download_id = ANY($1);", pq.Array(downloadIDs))
 	if err != nil {
-		return nil, downloads.InternalError("Database error (failed to lookup dependencies)", err)
+		return nil, httperror.InternalError("Database error (failed to lookup dependencies)", err)
 	}
 
 	for rows.Next() {
@@ -295,7 +325,7 @@ func (q *downloadQuery) Read(a *API, project maven.Identifier) ([]*download, err
 		var name, version string
 		err = rows.Scan(&downloadID, &name, &version)
 		if err != nil {
-			return nil, downloads.InternalError("Database error (failed to read dependencies)", err)
+			return nil, httperror.InternalError("Database error (failed to read dependencies)", err)
 		}
 
 		downloadsMap[downloadID].Dependencies[name] = version
@@ -305,7 +335,7 @@ func (q *downloadQuery) Read(a *API, project maven.Identifier) ([]*download, err
 	rows, err = a.DB.Query("SELECT download_id, classifier, extension, size, sha1, md5 FROM artifacts "+
 		"WHERE download_id = ANY($1);", pq.Array(downloadIDs))
 	if err != nil {
-		return nil, downloads.InternalError("Database error (failed to lookup artifacts)", err)
+		return nil, httperror.InternalError("Database error (failed to lookup artifacts)", err)
 	}
 
 	urlPrefix := a.Repo + strings.Replace(project.GroupID, ".", "/", -1) + "/" + project.ArtifactID + "/"
@@ -317,7 +347,7 @@ func (q *downloadQuery) Read(a *API, project maven.Identifier) ([]*download, err
 
 		err = rows.Scan(&downloadID, &classifier, &extension, &artifact.Size, &artifact.SHA1, &artifact.MD5)
 		if err != nil {
-			return nil, downloads.InternalError("Database error (failed to read artifacts)", err)
+			return nil, httperror.InternalError("Database error (failed to read artifacts)", err)
 		}
 
 		dl := downloadsMap[downloadID]

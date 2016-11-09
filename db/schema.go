@@ -19,7 +19,9 @@ func createTables(db *sql.DB) error {
 			UNIQUE(github_owner, github_repo),
 
 			use_snapshots BOOLEAN NOT NULL,
-			use_semver BOOLEAN NOT NULL
+			use_semver BOOLEAN NOT NULL,
+
+			last_updated TIMESTAMP(0) WITH TIME ZONE NOT NULL DEFAULT current_timestamp
 		);
 
 		CREATE TABLE build_types (

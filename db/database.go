@@ -20,6 +20,5 @@ func Reset(db *sql.DB) error {
 		return err
 	}
 
-	err = setupProjects(db)
-	return nil
+	return setupProjects(db)
 }

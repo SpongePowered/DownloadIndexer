@@ -3,17 +3,17 @@ package main
 import (
 	"database/sql"
 	"github.com/Minecrell/SpongeDownloads/auth"
+	"github.com/Minecrell/SpongeDownloads/cache"
 	"github.com/Minecrell/SpongeDownloads/db"
 	"github.com/Minecrell/SpongeDownloads/downloads"
-	"github.com/go-macaron/gzip"
+	"github.com/Minecrell/SpongeDownloads/httperror"
 	"gopkg.in/macaron.v1"
-	"log"
 	"net/http"
 	"os"
 	"strings"
 )
 
-var logger = log.New(os.Stdout, "[Main] ", log.LstdFlags)
+var logger = downloads.CreateLogger("Main")
 
 func main() {
 	// Parse module configuration
@@ -26,14 +26,25 @@ func main() {
 		enablePromote = modules.isEnabled("promote")
 	}
 
+	var c cache.Cache
+	if cacheConfig := os.Getenv("CACHE_PROXY"); cacheConfig != "" {
+		var err error
+		c, err = cache.Create(cacheConfig)
+		if err != nil {
+			logger.Fatalln(err)
+		}
+	}
+
 	// Setup database and create manager
-	manager := &downloads.Manager{DB: setupDatabase()}
+	manager := &downloads.Manager{
+		DB:    setupDatabase(),
+		Cache: c,
+	}
 
 	// Initialize web framework
 	m := macaron.New()
 	m.Use(macaron.Logger())
-	m.Use(gzip.Gziper())
-	m.Map(downloads.ErrorHandler())
+	m.Map(httperror.Handler())
 
 	renderer := macaron.Renderer(macaron.RenderOptions{IndentJSON: macaron.Env == macaron.DEV})
 
@@ -69,13 +80,13 @@ func setupDatabase() *sql.DB {
 
 	postgresDB, err := db.ConnectPostgres(requireEnv("POSTGRES_URL"))
 	if err != nil {
-		log.Fatalln(err)
+		logger.Fatalln(err)
 	}
 
 	// TODO
 	/*err = db.Reset(postgresDB)
 	if err != nil {
-		log.Fatalln(err)
+		logger.Fatalln(err)
 	}*/
 
 	return postgresDB
@@ -93,7 +104,7 @@ func setupAuthentication(key string) macaron.Handler {
 func requireEnv(key string) string {
 	value, ok := os.LookupEnv(key)
 	if !ok {
-		log.Fatalln(key, "is required")
+		logger.Fatalln(key, "is required")
 	}
 	return value
 }
@@ -105,7 +116,7 @@ func parseModules(key string) modules {
 	if ok {
 		m := strings.Split(components, ",")
 		if len(m) == 0 {
-			log.Fatalln("Cannot disable all modules")
+			logger.Fatalln("Cannot disable all modules")
 		}
 
 		return m

@@ -2,7 +2,7 @@ package maven
 
 import (
 	"errors"
-	"github.com/Minecrell/SpongeDownloads/downloads"
+	"github.com/Minecrell/SpongeDownloads/httperror"
 	"io"
 	"net/url"
 	"os"
@@ -30,17 +30,17 @@ func (repo *fileRepository) Download(path string, writer io.Writer) error {
 	f, err := os.Open(repo.dir + path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return downloads.NotFound("File does not exist")
+			return httperror.NotFound("File does not exist")
 		}
 
-		return downloads.InternalError("Failed to open file", err)
+		return httperror.InternalError("Failed to open file", err)
 	}
 
 	defer f.Close()
 
 	_, err = io.Copy(writer, f)
 	if err != nil {
-		return downloads.InternalError("Failed to read file", err)
+		return httperror.InternalError("Failed to read file", err)
 	}
 
 	return nil
@@ -51,19 +51,19 @@ func (repo *fileRepository) Upload(path string, reader io.Reader) error {
 
 	err := os.MkdirAll(filepath.Dir(path), os.ModePerm)
 	if err != nil {
-		return downloads.InternalError("Failed to create directory", err)
+		return httperror.InternalError("Failed to create directory", err)
 	}
 
 	f, err := os.Create(path)
 	if err != nil {
-		return downloads.InternalError("Failed to create file", err)
+		return httperror.InternalError("Failed to create file", err)
 	}
 
 	defer f.Close()
 
 	_, err = io.Copy(f, reader)
 	if err != nil {
-		return downloads.InternalError("Failed to write file", err)
+		return httperror.InternalError("Failed to write file", err)
 	}
 
 	return nil

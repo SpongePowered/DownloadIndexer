@@ -2,12 +2,13 @@ package api
 
 import (
 	"database/sql"
-	"github.com/Minecrell/SpongeDownloads/downloads"
+	"github.com/Minecrell/SpongeDownloads/httperror"
 	"github.com/Minecrell/SpongeDownloads/maven"
 	"github.com/lib/pq"
 	"gopkg.in/macaron.v1"
 	"net/http"
 	"sort"
+	"time"
 )
 
 type project struct {
@@ -43,22 +44,34 @@ func (a *API) GetProject(ctx *macaron.Context, c maven.Identifier) error {
 	p := project{BuildTypes: make(map[string]*buildType), Dependencies: make(map[string]versions)}
 	var projectID int
 	var useSemVer bool
+	var lastUpdated time.Time
 
-	err := a.DB.QueryRow("SELECT project_id, name, plugin_id, github_owner, github_repo, use_semver FROM projects "+
-		"WHERE group_id = $1 AND artifact_id = $2;",
-		c.GroupID, c.ArtifactID).Scan(&projectID, &p.Name, &p.PluginID, &p.GitHub.Owner, &p.GitHub.Repo, &useSemVer)
+	err := a.DB.QueryRow("SELECT project_id, name, plugin_id, github_owner, github_repo, use_semver, last_updated "+
+		"FROM projects "+
+		"WHERE group_id = $1 AND artifact_id = $2;", c.GroupID, c.ArtifactID).Scan(&projectID,
+		&p.Name, &p.PluginID, &p.GitHub.Owner, &p.GitHub.Repo, &useSemVer, &lastUpdated)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return downloads.NotFound("Unknown project")
+			return httperror.NotFound("Unknown project")
 		}
-		return downloads.InternalError("Database error (failed to lookup project)", err)
+		return httperror.InternalError("Database error (failed to lookup project)", err)
+	}
+
+	if a.Start.After(lastUpdated) {
+		lastUpdated = a.Start
+	}
+
+	setLastModified(ctx, lastUpdated)
+
+	if !modifiedSince(ctx, lastUpdated) {
+		return nil
 	}
 
 	// Get build types
 	rows, err := a.DB.Query("SELECT build_type_id, name FROM build_types "+
 		"JOIN project_build_types USING(build_type_id) WHERE project_id = $1;", projectID)
 	if err != nil {
-		return downloads.InternalError("Database error (failed to lookup build types)", err)
+		return httperror.InternalError("Database error (failed to lookup build types)", err)
 	}
 
 	for rows.Next() {
@@ -66,7 +79,7 @@ func (a *API) GetProject(ctx *macaron.Context, c maven.Identifier) error {
 		var name string
 		err = rows.Scan(&bt.id, &name)
 		if err != nil {
-			return downloads.InternalError("Database error (failed to read build type)", err)
+			return httperror.InternalError("Database error (failed to read build type)", err)
 		}
 
 		p.BuildTypes[name] = bt
@@ -79,7 +92,7 @@ func (a *API) GetProject(ctx *macaron.Context, c maven.Identifier) error {
 		"WHERE project_id = $1 GROUP BY build_type_id, label)"+
 		"ORDER BY published DESC;", projectID)
 	if err != nil {
-		return downloads.InternalError("Database error (failed to get latest downloads)", err)
+		return httperror.InternalError("Database error (failed to get latest downloads)", err)
 	}
 
 	downloadIDs := make([]int64, 0, len(p.BuildTypes))
@@ -92,7 +105,7 @@ rows:
 
 		err = rows.Scan(&buildTypeID, &label, &downloadID, &version)
 		if err != nil {
-			return downloads.InternalError("Database error (failed to read latest download)", err)
+			return httperror.InternalError("Database error (failed to read latest download)", err)
 		}
 
 		for _, bt := range p.BuildTypes {
@@ -119,13 +132,13 @@ rows:
 			}
 		}
 
-		return downloads.InternalError("Found unknown build type ID", nil)
+		return httperror.InternalError("Found unknown build type ID", nil)
 	}
 
 	// Get dependencies for latest builds
 	rows, err = a.DB.Query("SELECT * FROM dependencies WHERE download_ID = ANY($1);", pq.Array(downloadIDs))
 	if err != nil {
-		return downloads.InternalError("Database error (failed to get latest dependencies)", err)
+		return httperror.InternalError("Database error (failed to get latest dependencies)", err)
 	}
 
 	for rows.Next() {
@@ -133,7 +146,7 @@ rows:
 		var name, version string
 		err = rows.Scan(&downloadID, &name, &version)
 		if err != nil {
-			return downloads.InternalError("Database error (failed to read latest dependency)", err)
+			return httperror.InternalError("Database error (failed to read latest dependency)", err)
 		}
 
 		for _, bt := range p.BuildTypes {
@@ -150,14 +163,14 @@ rows:
 	rows, err = a.DB.Query("SELECT DISTINCT name, split_part(dependencies.version, '-', 1) FROM dependencies "+
 		"JOIN downloads USING(download_id) WHERE project_id = $1;", projectID)
 	if err != nil {
-		return downloads.InternalError("Database error (failed to lookup dependency versions)", err)
+		return httperror.InternalError("Database error (failed to lookup dependency versions)", err)
 	}
 
 	for rows.Next() {
 		var name, version string
 		err = rows.Scan(&name, &version)
 		if err != nil {
-			return downloads.InternalError("Database error (failed to read dependency version)", err)
+			return httperror.InternalError("Database error (failed to read dependency version)", err)
 		}
 
 		p.Dependencies[name] = append(p.Dependencies[name], version)
@@ -172,14 +185,14 @@ rows:
 		rows, err = a.DB.Query("SELECT DISTINCT split_part(version, '-', 1) FROM downloads "+
 			"WHERE project_id = $1;", projectID)
 		if err != nil {
-			return downloads.InternalError("Database error (failed to lookup versions)", err)
+			return httperror.InternalError("Database error (failed to lookup versions)", err)
 		}
 
 		for rows.Next() {
 			var version string
 			err = rows.Scan(&version)
 			if err != nil {
-				return downloads.InternalError("Database error (failed to read version)", err)
+				return httperror.InternalError("Database error (failed to read version)", err)
 			}
 
 			p.Versions = append(p.Versions, version)

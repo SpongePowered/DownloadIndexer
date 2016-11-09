@@ -2,21 +2,23 @@ package downloads
 
 import (
 	"database/sql"
+	"github.com/Minecrell/SpongeDownloads/cache"
 	"gopkg.in/macaron.v1"
 	"log"
 	"os"
 )
 
 type Manager struct {
-	DB *sql.DB
+	DB    *sql.DB
+	Cache cache.Cache
 }
 
-func createLogger(name string) *log.Logger {
+func CreateLogger(name string) *log.Logger {
 	return log.New(os.Stdout, "["+name+"] ", log.LstdFlags)
 }
 
 func (m *Manager) Module(name string) *Module {
-	return &Module{m, createLogger(name)}
+	return &Module{m, CreateLogger(name)}
 }
 
 type Module struct {

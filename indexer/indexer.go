@@ -7,7 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"github.com/Minecrell/SpongeDownloads/db"
-	"github.com/Minecrell/SpongeDownloads/downloads"
+	"github.com/Minecrell/SpongeDownloads/httperror"
 	"github.com/Minecrell/SpongeDownloads/indexer/mcmod"
 	"strings"
 	"time"
@@ -29,22 +29,22 @@ func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []by
 
 	manifest, published, metadata, err := readJar(mainJar, s.project.pluginID != "")
 	if err != nil {
-		return downloads.BadRequest("Failed to read JAR file", err)
+		return httperror.BadRequest("Failed to read JAR file", err)
 	}
 	if manifest == nil {
-		return downloads.BadRequest("Missing manifest in JAR", nil)
+		return httperror.BadRequest("Missing manifest in JAR", nil)
 	}
 
 	if publishedOverride != nullTime {
 		published = publishedOverride
 	} else if published == nullTime {
-		return downloads.BadRequest("Missing timestamps in JAR file", nil)
+		return httperror.BadRequest("Missing timestamps in JAR file", nil)
 	}
 
 	if metadataBytes != nil {
 		metadata, err = mcmod.ReadMetadataBytes(metadataBytes)
 		if err != nil {
-			return downloads.BadRequest("Failed to read metadata file", err)
+			return httperror.BadRequest("Failed to read metadata file", err)
 		}
 	}
 
@@ -58,30 +58,30 @@ func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []by
 		}
 
 		if pluginMeta == nil {
-			return downloads.BadRequest("Missing plugin '"+s.project.pluginID+"' in "+mcmod.MetadataFileName, nil)
+			return httperror.BadRequest("Missing plugin '"+s.project.pluginID+"' in "+mcmod.MetadataFileName, nil)
 		} else if pluginMeta.Version != s.version {
-			return downloads.BadRequest(mcmod.MetadataFileName+" version mismatch: "+s.version+" != "+pluginMeta.Version, nil)
+			return httperror.BadRequest(mcmod.MetadataFileName+" version mismatch: "+s.version+" != "+pluginMeta.Version, nil)
 		}
 	} else if s.project.pluginID != "" {
-		return downloads.BadRequest("Missing "+mcmod.MetadataFileName+" in JAR", nil)
+		return httperror.BadRequest("Missing "+mcmod.MetadataFileName+" in JAR", nil)
 	}
 
 	commit := manifest["Git-Commit"]
 	if commit == "" {
-		return downloads.BadRequest("Missing Git-Commit in manifest", err)
+		return httperror.BadRequest("Missing Git-Commit in manifest", err)
 	}
 
 	if branch == "" {
 		branch = manifest["Git-Branch"]
 		if branch == "" {
-			return downloads.BadRequest("Missing Git-Branch in manifest", err)
+			return httperror.BadRequest("Missing Git-Branch in manifest", err)
 		}
 		if strings.HasPrefix(branch, remoteOriginPrefix) {
 			branch = branch[len(remoteOriginPrefix):]
 		}
 	}
 	if strings.IndexByte(branch, remoteSeparator) != -1 {
-		return downloads.BadRequest("Branch should not contain a slash", nil)
+		return httperror.BadRequest("Branch should not contain a slash", nil)
 	}
 
 	if buildType == "" {
@@ -96,20 +96,20 @@ func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []by
 		s.project.id, buildType).Scan(&buildTypeId, &allowsPromotion)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return downloads.BadRequest("Unknown build type", err)
+			return httperror.BadRequest("Unknown build type", err)
 		} else {
-			return downloads.InternalError("Database error (failed to lookup build type)", err)
+			return httperror.InternalError("Database error (failed to lookup build type)", err)
 		}
 	}
 
 	if recommended && !allowsPromotion {
-		return downloads.BadRequest("Build type does not allow promotion", err)
+		return httperror.BadRequest("Build type does not allow promotion", err)
 	}
 
 	// Start transaction
 	s.tx, err = i.DB.Begin()
 	if err != nil {
-		return downloads.InternalError("Database error (failed to start transaction)", err)
+		return httperror.InternalError("Database error (failed to start transaction)", err)
 	}
 
 	var changelog string
@@ -145,7 +145,7 @@ func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []by
 		s.project.id, buildTypeId, displayVersion, db.ToNullString(snapshotVersion), published, branch, commit,
 		db.ToNullString(label), db.ToNullString(changelog)).Scan(&s.downloadID)
 	if err != nil {
-		return downloads.InternalError("Database error (failed to add download)", err)
+		return httperror.InternalError("Database error (failed to add download)", err)
 	}
 
 	// Insert dependencies (if available)
@@ -156,7 +156,7 @@ func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []by
 				_, err = s.tx.Exec("INSERT INTO dependencies VALUES ($1, $2, $3);",
 					s.downloadID, dependency.ID, dependency.Version)
 				if err != nil {
-					return downloads.InternalError("Database error (failed to add dependency)", err)
+					return httperror.InternalError("Database error (failed to add dependency)", err)
 				}
 			} else {
 				i.Log.Println("Skipping dependency", dependency.ID, "(missing version)")
@@ -176,19 +176,19 @@ func (i *Indexer) generateChangelog(p *project, commit string, parentCommit stri
 	// Generate changelog
 	repo, err := i.git.OpenGitHub(p.githubOwner, p.githubRepo)
 	if err != nil {
-		return "", downloads.InternalError("Git error (failed to open repository)", err)
+		return "", httperror.InternalError("Git error (failed to open repository)", err)
 	}
 
 	defer repo.Close()
 
 	changelog, err := repo.GenerateChangelog(commit, parentCommit)
 	if err != nil {
-		return "", downloads.InternalError("Git error (failed to generate changelog)", err)
+		return "", httperror.InternalError("Git error (failed to generate changelog)", err)
 	}
 
 	jsonBytes, err := json.Marshal(changelog)
 	if err != nil {
-		return "", downloads.InternalError("Git error (failed to serialize changelog)", err)
+		return "", httperror.InternalError("Git error (failed to serialize changelog)", err)
 	}
 
 	return string(jsonBytes), nil
@@ -220,7 +220,7 @@ func (a *artifact) create(s *session, t artifactType, data []byte, upload bool) 
 	_, err = s.tx.Exec("INSERT INTO artifacts VALUES ($1, $2, $3, $4, $5, $6);",
 		s.downloadID, t.classifier, t.extension, len(data), a.sha1, a.md5)
 	if err != nil {
-		return downloads.InternalError("Database error (failed to create artifact)", err)
+		return httperror.InternalError("Database error (failed to create artifact)", err)
 	}
 
 	return
@@ -230,7 +230,7 @@ func (a *artifact) setOrVerifyMD5(md5Sum string) error {
 	if a.md5 == "" {
 		a.md5 = md5Sum
 	} else if a.md5 != md5Sum {
-		return downloads.BadRequest("MD5 checksum mismatch: "+a.md5+" != "+md5Sum, nil)
+		return httperror.BadRequest("MD5 checksum mismatch: "+a.md5+" != "+md5Sum, nil)
 	}
 
 	return nil
@@ -240,7 +240,7 @@ func (a *artifact) setOrVerifySHA1(sha1Sum string) error {
 	if a.sha1 == "" {
 		a.sha1 = sha1Sum
 	} else if a.sha1 != sha1Sum {
-		return downloads.BadRequest("SHA1 checksum mismatch: "+a.sha1+" != "+sha1Sum, nil)
+		return httperror.BadRequest("SHA1 checksum mismatch: "+a.sha1+" != "+sha1Sum, nil)
 	}
 
 	return nil
