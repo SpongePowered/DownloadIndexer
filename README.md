@@ -15,17 +15,21 @@ SpongeDownloads uses the following environment variables:
 - `POSTGRES_URL`: URL to PostgreSQL database instance
   - `postgres://postgres@localhost/downloads?sslmode=disable`
 
-- **Optional**: `REDIRECT_ROOT` to redirect all requests to `/` to another URL
+- **Optional:** `REDIRECT_ROOT` to redirect all requests to `/` to another URL
   - `https://www.spongepowered.org/#downloads`
 
-- **Indexer**:
-  - `UPLOAD_URL`: URL to Maven repository where the artifacts will be stored, e.g.:
-    - `http://user:password@repo.example.com/maven`
-    - `ftp://user:password@ftp.repo.example.com`
+- **Indexer:**
   - `UPLOAD_AUTH`: Username/password for authentication to upload artifacts
     - `user:password`
   - `GIT_STORAGE_DIR`: Directory to clone the Git repositories to, will be created automatically
 
-- **API**:
+- **Uploader:**
+  - `UPLOAD_URL`: URL to Maven repository where the artifacts will be stored, e.g.:
+    - `http://user:password@repo.example.com/maven`
+    - `ftp://user:password@ftp.repo.example.com`
+    - `file:///var/www/repo`
+    - `null://` - Writes all uploaded files to `/dev/null`.
+
+- **API:**
   - `API_URL`: URL to Maven repo, used for generating download URLs
     - `http://repo.example.com/maven`
