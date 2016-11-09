@@ -17,9 +17,16 @@ func CreateRepository(urlString string) (Repository, error) {
 		return nil, err
 	}
 
+	// Make sure path ends with a slash
+	if u.Path != "" && u.Path[len(u.Path)-1] != '/' {
+		u.Path += "/"
+	}
+
 	switch u.Scheme {
 	case "http", "https":
 		return createHTTP(u)
+	case "file":
+		return createFile(u)
 	case "ftp":
 		return createFTP(u)
 	case "null":

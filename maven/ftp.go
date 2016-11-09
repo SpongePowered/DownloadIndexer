@@ -15,10 +15,6 @@ type ftpError interface {
 }
 
 func createFTP(url *url.URL) (*ftpRepository, error) {
-	if url.Path != "" && url.Path[len(url.Path)-1] != '/' {
-		url.Path += "/"
-	}
-
 	var config goftp.Config
 
 	if url.User != nil {
