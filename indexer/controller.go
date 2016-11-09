@@ -149,9 +149,9 @@ func (i *Indexer) Get(ctx *macaron.Context) error {
 		return downloads.Forbidden("Can only download maven metadata")
 	}
 
-	project, ok := i.projects[p.Identifier]
-	if !ok {
-		return downloads.NotFound("Unknown project")
+	project := i.projects[p.Identifier]
+	if project == nil {
+		return i.repo.Download(path, ctx.Resp)
 	}
 
 	var s *session
@@ -210,9 +210,9 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 		return downloads.BadRequest("Invalid path", err)
 	}
 
-	project, ok := i.projects[p.Identifier]
-	if !ok {
-		return downloads.NotFound("Unknown project")
+	project := i.projects[p.Identifier]
+	if project == nil {
+		return i.repo.Upload(path, ctx.Req.Body().ReadCloser())
 	}
 
 	if p.snapshot && !project.useSnapshots {
