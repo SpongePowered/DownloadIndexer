@@ -24,7 +24,7 @@ func Handler() macaron.ReturnHandler {
 
 			httpError, ok := err.(*HTTPError)
 
-			if !ok || httpError.Cause != nil || httpError.Message != "" {
+			if !ok || httpError.Message != "" || httpError.Cause != nil {
 				logger := ctx.GetVal(reflect.TypeOf((*log.Logger)(nil))).Interface().(*log.Logger)
 				logger.Println(err)
 			}
@@ -33,7 +33,7 @@ func Handler() macaron.ReturnHandler {
 				if ok {
 					http.Error(ctx.Resp, httpError.Message, httpError.Code)
 				} else {
-					http.Error(ctx.Resp, "", http.StatusInternalServerError)
+					http.Error(ctx.Resp, "Internal Server Error", http.StatusInternalServerError)
 				}
 			}
 		default:
