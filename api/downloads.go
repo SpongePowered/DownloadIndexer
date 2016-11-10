@@ -3,7 +3,6 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"github.com/Minecrell/SpongeDownloads/db"
 	"github.com/Minecrell/SpongeDownloads/httperror"
 	"github.com/Minecrell/SpongeDownloads/maven"
@@ -17,10 +16,7 @@ import (
 const recommendedLabel = "recommended"
 
 var (
-	errNotModified = errors.New("Not modified")
-
 	emptyArray [0]struct{}
-	emptyMap   = map[string]struct{}{}
 )
 
 type download struct {
@@ -48,11 +44,7 @@ type artifact struct {
 func (a *API) GetDownload(ctx *macaron.Context, project maven.Identifier) error {
 	q, err := a.createDownloadQuery(ctx, project)
 	if err != nil {
-		if err != errNotModified {
-			return err
-		} else {
-			return nil
-		}
+		return err
 	}
 
 	q.init(false)
@@ -63,42 +55,32 @@ func (a *API) GetDownload(ctx *macaron.Context, project maven.Identifier) error 
 		return err
 	}
 
-	if dls != nil {
-		ctx.JSON(http.StatusOK, dls[0])
-	} else {
-		ctx.JSON(http.StatusNotFound, emptyMap)
+	if dls == nil {
+		return httperror.NotFound("Unknown version")
 	}
 
+	ctx.JSON(http.StatusOK, dls[0])
 	return nil
 }
 
 func (a *API) GetRecommendedDownload(ctx *macaron.Context, project maven.Identifier) error {
 	dls, err := a.filterDownloads(ctx, project, false, recommendedLabel)
 	if err != nil {
-		if err != errNotModified {
-			return err
-		} else {
-			return nil
-		}
+		return err
 	}
 
-	if dls != nil {
-		ctx.JSON(http.StatusOK, dls[0])
-	} else {
-		ctx.JSON(http.StatusNotFound, emptyMap)
+	if dls == nil {
+		return httperror.NotFound("No recommended version found")
 	}
 
+	ctx.JSON(http.StatusOK, dls[0])
 	return nil
 }
 
 func (a *API) GetDownloads(ctx *macaron.Context, project maven.Identifier) error {
 	dls, err := a.filterDownloads(ctx, project, true, "")
 	if err != nil {
-		if err != errNotModified {
-			return err
-		} else {
-			return nil
-		}
+		return err
 	}
 
 	if dls != nil {
@@ -144,7 +126,7 @@ func (a *API) createDownloadQuery(ctx *macaron.Context, project maven.Identifier
 		q.builder = db.NewSQLBuilder()
 		return q, nil
 	} else {
-		return nil, errNotModified // Up-to-date
+		return nil, httperror.NotModified // Up-to-date
 	}
 }
 

@@ -22,15 +22,15 @@ func Handler() macaron.ReturnHandler {
 
 			err := vals[0].Interface().(error)
 
-			loggerVal := ctx.GetVal(reflect.TypeOf((*log.Logger)(nil)))
-			if loggerVal.IsValid() {
-				loggerVal.Interface().(*log.Logger).Println(err)
-			} else {
-				log.Println(err)
+			httpError, ok := err.(*HTTPError)
+
+			if !ok || httpError.Cause != nil || httpError.Message != "" {
+				logger := ctx.GetVal(reflect.TypeOf((*log.Logger)(nil))).Interface().(*log.Logger)
+				logger.Println(err)
 			}
 
 			if !ctx.Written() {
-				if httpError, ok := err.(*HTTPError); ok {
+				if ok {
 					http.Error(ctx.Resp, httpError.Message, httpError.Code)
 				} else {
 					http.Error(ctx.Resp, "", http.StatusInternalServerError)

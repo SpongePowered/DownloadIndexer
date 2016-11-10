@@ -2,6 +2,8 @@ package httperror
 
 import "net/http"
 
+var NotModified = New(http.StatusNotModified, "", nil)
+
 type HTTPError struct {
 	Code    int
 	Message string
