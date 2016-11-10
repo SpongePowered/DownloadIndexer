@@ -13,7 +13,7 @@ const (
 	fastlyCacheControlHeader = "Surrogate-Control"
 	fastlyCacheControl       = "max-age=2628000, stale-while-revalidate=30, stale-if-error=604800"
 
-	fastlyKeys = "Surrogate-Keys"
+	fastlyKeys = "Surrogate-Key"
 
 	fastlyAPI       = "https://api.fastly.com/service/%s/%s"
 	fastlyKeyHeader = "Fastly-Key"
