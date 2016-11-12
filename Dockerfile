@@ -13,7 +13,6 @@ RUN apk add --no-cache libgit2 \
     && go get -v github.com/Minecrell/SpongeDownloads \
     && apk del build-deps \
     && cp $GOPATH/bin/SpongeDownloads /usr/bin \
-    && rm -rf $GOPATH \
-    && adduser -S go
+    && rm -rf $GOPATH
 
-USER go
+USER 1001
