@@ -117,9 +117,12 @@ func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []by
 	// Attempt to find parent commit
 	if buildTypeId > 0 {
 		var parentCommit string
-		s.tx.QueryRow("SELECT commit FROM downloads "+
+		err = s.tx.QueryRow("SELECT commit FROM downloads "+
 			"WHERE project_id = $1 AND build_type_id = $2 ORDER BY published DESC LIMIT 1;",
 			s.project.id, buildTypeId).Scan(&parentCommit)
+		if err != nil && err != sql.ErrNoRows {
+			return httperror.InternalError("Database error (failed to lookup parent commit)", err)
+		}
 
 		if parentCommit != "" {
 			// Parent commit found, generate changelog
