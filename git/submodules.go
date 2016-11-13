@@ -5,19 +5,23 @@ import (
 	"strings"
 )
 
-func (r *Repository) readSubmodules(tree *git.Tree) (result map[string]string, err error) {
+func (r *Repository) readSubmodules(tree *git.Tree) (map[string]string, error) {
 	e, err := tree.EntryByPath(".gitmodules")
 	if err != nil {
-		return nil, nil
+		gitErr, ok := err.(*git.GitError)
+		if ok && gitErr.Code == git.ErrNotFound {
+			// Don't return error if no submodules exist
+			return nil, nil
+		}
+		return nil, err
 	}
 
 	blob, err := r.repo.LookupBlob(e.Id)
 	if err != nil {
-		return
+		return nil, err
 	}
 
-	result = r.readGitModules(blob.Contents())
-	return
+	return r.readGitModules(blob.Contents()), nil
 }
 
 func (m *Manager) readGitModules(data []byte) map[string]string {

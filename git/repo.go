@@ -26,7 +26,7 @@ type Repository struct {
 
 	lock          sync.Mutex
 	repo          *git.Repository
-	failedCommits map[string]struct{}
+	failedCommits map[string]error
 }
 
 func Create(manager *downloads.Manager, dir string) (*Manager, error) {
@@ -56,7 +56,7 @@ func (m *Manager) Open(url string) (*Repository, error) {
 			return nil, err
 		}
 
-		result = &Repository{Manager: m, url: url, repo: repo, failedCommits: make(map[string]struct{})}
+		result = &Repository{Manager: m, url: url, repo: repo, failedCommits: make(map[string]error)}
 		m.repos[url] = result
 	}
 

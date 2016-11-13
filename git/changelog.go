@@ -9,7 +9,10 @@ import (
 
 const signedOff = "Signed-off-by:"
 
-var errFailedCommit = errors.New("Failed to load commit")
+var (
+	errMerge        = errors.New("Cannot generate changelog for merge commit")
+	errOctopusMerge = errors.New("Cannot generate changelog for merge commit of multiple branches (octopus merge)")
+)
 
 type Commit struct {
 	ID          string    `json:"id"`
@@ -23,13 +26,13 @@ type Commit struct {
 
 func (r *Repository) GenerateChangelog(commitHash, parentHash string) ([]*Commit, error) {
 	// Have we already tried (and failed) to load this commit?
-	if _, ok := r.failedCommits[commitHash]; ok {
-		return nil, errFailedCommit
+	if err, ok := r.failedCommits[commitHash]; ok {
+		return nil, err
 	}
 
 	id, err := git.NewOid(commitHash)
 	if err != nil {
-		r.failedCommits[commitHash] = nothing
+		r.failedCommits[commitHash] = err
 		return nil, err
 	}
 
@@ -41,17 +44,17 @@ func (r *Repository) GenerateChangelog(commitHash, parentHash string) ([]*Commit
 	return r.generateChangelog(id, parent)
 }
 
-func (r *Repository) generateChangelog(id *git.Oid, parent *git.Oid) (commits []*Commit, err error) {
+func (r *Repository) generateChangelog(id *git.Oid, parent *git.Oid) ([]*Commit, error) {
 	commitHash := id.String()
 
 	// Have we already tried (and failed) to load this commit?
-	if _, ok := r.failedCommits[commitHash]; ok {
-		return
+	if err, ok := r.failedCommits[commitHash]; ok {
+		return nil, err
 	}
 
 	w, err := r.repo.Walk()
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	w.Sorting(git.SortTopological)
@@ -60,36 +63,36 @@ func (r *Repository) generateChangelog(id *git.Oid, parent *git.Oid) (commits []
 	if err != nil {
 		err = r.fetchIfNotFound(err)
 		if err != nil {
-			return
+			return nil, err
 		}
 
 		err = w.Push(id)
 		if err != nil {
-			r.failedCommits[commitHash] = nothing
-			return
+			r.failedCommits[commitHash] = err
+			return nil, err
 		}
 	}
 
-	err = w.Hide(parent)
-	if err != nil {
-		return
+	if parent != nil {
+		err = w.Hide(parent)
+		if err != nil {
+			return nil, err
+		}
 	}
+
+	var commits []*Commit
 
 	err = w.Iterate(func(commit *git.Commit) bool {
-		c, err := r.prepareCommit(commit)
-		if err != nil {
-			r.Log.Println("Failed to generate submodule changelog:", err)
-		}
-
-		commits = append(commits, c)
+		commits = append(commits, r.prepareCommit(commit))
 		return true
 	})
-	return
+
+	return commits, nil
 }
 
-func (r *Repository) prepareCommit(commit *git.Commit) (result *Commit, err error) {
+func (r *Repository) prepareCommit(commit *git.Commit) *Commit {
 	author := commit.Author()
-	result = &Commit{
+	result := &Commit{
 		ID:     commit.Id().String(),
 		Author: author.Name,
 		Date:   author.When,
@@ -97,17 +100,66 @@ func (r *Repository) prepareCommit(commit *git.Commit) (result *Commit, err erro
 
 	result.Title, result.Description = splitCommitMessage(commit.Message())
 
+	var err error
+	result.Submodules, err = r.generateSubmoduleChangelog(commit)
+	if err != nil {
+		r.Log.Println("Failed to generate submodule changelog for", commit.Id(), err)
+	}
+
+	return result
+}
+
+func (r *Repository) generateSubmoduleChangelog(commit *git.Commit) (map[string][]*Commit, error) {
+	parentCount := commit.ParentCount()
+	if parentCount == 0 {
+		// Initial commit
+		return nil, nil
+	}
+
 	tree, err := commit.Tree()
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	submodules, err := r.readSubmodules(tree)
 	if err != nil {
-		return
+		return nil, err
 	}
 
-	result.Submodules = make(map[string][]*Commit)
+	// Skip if no submodules were found
+	if len(submodules) == 0 {
+		return nil, nil
+	}
+
+	var parentCommit *git.Commit
+	switch commit.ParentCount() {
+	case 1:
+		parentCommit = commit.Parent(0)
+	case 2:
+		// Merge commit
+
+		/*var mergeBase *git.Oid
+		mergeBase, err = r.repo.MergeBase(commit.ParentId(0), commit.ParentId(1))
+		if err != nil {
+			return nil, newError(err, "Failed to get merge base for merge commit")
+		}
+
+		parentCommit, err = r.repo.LookupCommit(mergeBase)
+		if err != nil {
+			return nil, newError(err, "Failed to lookup merge base commit", mergeBase)
+		}*/
+
+		return nil, errMerge
+	default:
+		return nil, errOctopusMerge
+	}
+
+	parentTree, err := parentCommit.Tree()
+	if err != nil {
+		return nil, newError(err, "Failed to open tree for parent commit", parentCommit)
+	}
+
+	changelog := make(map[string][]*Commit)
 
 	for path, url := range submodules {
 		subEntry, err := tree.EntryByPath(path)
@@ -116,25 +168,14 @@ func (r *Repository) prepareCommit(commit *git.Commit) (result *Commit, err erro
 			continue
 		}
 
-		// Skip merge commits
-		if commit.ParentCount() != 1 {
-			continue
-		}
-
-		parentCommit := commit.Parent(0)
-		parentTree, err := parentCommit.Tree()
-		if err != nil {
-			r.Log.Println("Failed to get tree for parent commit:", err)
-			continue
-		}
-
 		parentSubEntry, err := parentTree.EntryByPath(path)
 		if err != nil {
-			r.Log.Println("Failed to get submodule entry for parent comit:", err)
+			r.Log.Println("Failed to get submodule entry for parent commit:", err)
 			continue
 		}
 
 		if subEntry.Id.Equal(parentSubEntry.Id) {
+			// No changes
 			continue
 		}
 
@@ -150,10 +191,10 @@ func (r *Repository) prepareCommit(commit *git.Commit) (result *Commit, err erro
 			r.Log.Println("Failed to generate submodule changelog:", err)
 		}
 
-		result.Submodules[path] = commits
+		changelog[path] = commits
 	}
 
-	return
+	return changelog, nil
 }
 
 func splitCommitMessage(input string) (title string, message string) {
