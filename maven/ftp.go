@@ -72,11 +72,11 @@ func (repo *ftpRepository) Upload(path string, reader io.Reader) error {
 	return httperror.New(http.StatusBadGateway, "Failed to upload file", err)
 }
 
-func (ftp *ftpRepository) createPath(path string) {
+func (repo *ftpRepository) createPath(path string) {
 	for i, c := range path {
 		if c == '/' {
 			// Ignore errors since the directories may already exist
-			ftp.ftp.Mkdir(path[:i])
+			repo.ftp.Mkdir(path[:i])
 		}
 	}
 }

@@ -96,9 +96,9 @@ func setupAuthentication(key string) macaron.Handler {
 	value := requireEnv(key)
 	if value != "" {
 		return auth.Basic([]byte(value))
-	} else {
-		return func() {}
 	}
+
+	return func() {}
 }
 
 func requireEnv(key string) string {
@@ -120,9 +120,9 @@ func parseModules(key string) modules {
 		}
 
 		return m
-	} else {
-		return nil
 	}
+
+	return nil
 }
 
 func (m modules) isEnabled(name string) bool {

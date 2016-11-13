@@ -125,9 +125,9 @@ func (a *API) createDownloadQuery(ctx *macaron.Context, project maven.Identifier
 	if modifiedSince(ctx, lastUpdated) {
 		q.builder = db.NewSQLBuilder()
 		return q, nil
-	} else {
-		return nil, httperror.NotModified // Up-to-date
 	}
+
+	return nil, httperror.NotModified // Up-to-date
 }
 
 func (q *downloadQuery) init(dependencies bool) {
@@ -351,9 +351,8 @@ func (q *downloadQuery) Read(a *API, project maven.Identifier) ([]*download, err
 func queryIf(ctx *macaron.Context, key string, extended bool) string {
 	if extended {
 		return ctx.Query(key)
-	} else {
-		return ""
 	}
+	return ""
 }
 
 func queryBool(ctx *macaron.Context, key string) bool {

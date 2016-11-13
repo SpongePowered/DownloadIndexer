@@ -155,7 +155,7 @@ func substringBefore(s string, c byte) string {
 	i := strings.IndexByte(s, c)
 	if i >= 0 {
 		return s[:i]
-	} else {
-		return s
 	}
+
+	return s
 }

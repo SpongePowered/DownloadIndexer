@@ -40,12 +40,12 @@ func setupBuildType(db *sql.DB, name string, allowsPromotion bool) (b int, err e
 	return
 }
 
-func setupProject(db *sql.DB, name, groupId, artifactId, pluginID, githubOwner, githubRepo string, snapshots bool,
+func setupProject(db *sql.DB, name, groupID, artifactID, pluginID, githubOwner, githubRepo string, snapshots bool,
 	semver bool, buildTypes ...int) error {
 
 	var projectID int
 	err := db.QueryRow("INSERT INTO projects VALUES (DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8) RETURNING project_id;",
-		name, groupId, artifactId, ToNullString(pluginID), githubOwner, githubRepo, snapshots, semver).Scan(&projectID)
+		name, groupID, artifactID, ToNullString(pluginID), githubOwner, githubRepo, snapshots, semver).Scan(&projectID)
 	if err != nil {
 		return err
 	}

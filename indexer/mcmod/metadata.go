@@ -34,9 +34,9 @@ type Dependency struct {
 func (d *Dependency) MarshalText() ([]byte, error) {
 	if d.Version != "" {
 		return []byte(d.ID + string(versionSeparator) + d.Version), nil
-	} else {
-		return []byte(d.ID), nil
 	}
+
+	return []byte(d.ID), nil
 }
 
 func (d *Dependency) UnmarshalText(text []byte) error {

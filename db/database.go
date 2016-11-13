@@ -2,6 +2,8 @@ package db
 
 import (
 	"database/sql"
+
+	// Register PostgreSQL SQL driver
 	_ "github.com/lib/pq"
 )
 

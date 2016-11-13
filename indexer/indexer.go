@@ -88,18 +88,17 @@ func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []by
 		buildType = substringBefore(branch, buildTypeSeparator)
 	}
 
-	var buildTypeId int
+	var buildTypeID int
 	var allowsPromotion bool
 	err = i.DB.QueryRow("SELECT build_type_id, allows_promotion FROM build_types "+
 		"JOIN project_build_types USING(build_type_id) "+
 		"WHERE project_id = $1 AND name = $2;",
-		s.project.id, buildType).Scan(&buildTypeId, &allowsPromotion)
+		s.project.id, buildType).Scan(&buildTypeID, &allowsPromotion)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return httperror.BadRequest("Unknown build type", err)
-		} else {
-			return httperror.InternalError("Database error (failed to lookup build type)", err)
 		}
+		return httperror.InternalError("Database error (failed to lookup build type)", err)
 	}
 
 	if recommended && !allowsPromotion {
@@ -115,11 +114,11 @@ func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []by
 	var changelog string
 
 	// Attempt to find parent commit
-	if buildTypeId > 0 {
+	if buildTypeID > 0 {
 		var parentCommit string
 		err = s.tx.QueryRow("SELECT commit FROM downloads "+
 			"WHERE project_id = $1 AND build_type_id = $2 ORDER BY published DESC LIMIT 1;",
-			s.project.id, buildTypeId).Scan(&parentCommit)
+			s.project.id, buildTypeID).Scan(&parentCommit)
 		if err != nil && err != sql.ErrNoRows {
 			return httperror.InternalError("Database error (failed to lookup parent commit)", err)
 		}
@@ -145,7 +144,7 @@ func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []by
 
 	err = s.tx.QueryRow("INSERT INTO downloads VALUES (DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9) "+
 		"RETURNING download_id;",
-		s.project.id, buildTypeId, displayVersion, db.ToNullString(snapshotVersion), published, branch, commit,
+		s.project.id, buildTypeID, displayVersion, db.ToNullString(snapshotVersion), published, branch, commit,
 		db.ToNullString(label), db.ToNullString(changelog)).Scan(&s.downloadID)
 	if err != nil {
 		return httperror.InternalError("Database error (failed to add download)", err)
@@ -252,7 +251,7 @@ func (a *artifact) setOrVerifySHA1(sha1Sum string) error {
 func cleanVersion(v string) string {
 	if len(v) >= 2 && v[0] == '[' && v[len(v)-1] == ']' {
 		return v[1 : len(v)-1]
-	} else {
-		return v
 	}
+
+	return v
 }

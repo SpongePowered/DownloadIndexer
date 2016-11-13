@@ -78,9 +78,9 @@ func modifiedSince(ctx *macaron.Context, lastUpdated time.Time) bool {
 	if modifiedSince, err := parseIfModifiedSince(ctx); err == nil && modifiedSince.Equal(lastUpdated) {
 		ctx.Status(http.StatusNotModified)
 		return false
-	} else {
-		return true
 	}
+
+	return true
 }
 
 func setLastModified(ctx *macaron.Context, lastUpdated time.Time) {
