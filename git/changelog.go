@@ -1,18 +1,12 @@
 package git
 
 import (
-	"errors"
 	"github.com/libgit2/git2go"
 	"strings"
 	"time"
 )
 
 const signedOff = "Signed-off-by:"
-
-var (
-	errMerge        = errors.New("Cannot generate changelog for merge commit")
-	errOctopusMerge = errors.New("Cannot generate changelog for merge commit of multiple branches (octopus merge)")
-)
 
 type Commit struct {
 	ID          string    `json:"id"`
@@ -100,18 +94,20 @@ func (r *Repository) prepareCommit(commit *git.Commit) *Commit {
 
 	result.Title, result.Description = splitCommitMessage(commit.Message())
 
-	var err error
-	result.Submodules, err = r.generateSubmoduleChangelog(commit)
-	if err != nil {
-		r.Log.Println("Failed to generate submodule changelog for", commit.Id(), err)
+	// Can only generate submodule changelog for normal commits (skip initial/merge commits)
+	if commit.ParentCount() == 1 {
+		var err error
+		result.Submodules, err = r.generateSubmoduleChangelog(commit)
+		if err != nil {
+			r.Log.Println("Failed to generate submodule changelog for", commit.Id(), err)
+		}
 	}
 
 	return result
 }
 
 func (r *Repository) generateSubmoduleChangelog(commit *git.Commit) (map[string][]*Commit, error) {
-	parentCount := commit.ParentCount()
-	if parentCount == 0 {
+	if commit.ParentCount() != 1 {
 		// Initial commit
 		return nil, nil
 	}
@@ -131,29 +127,7 @@ func (r *Repository) generateSubmoduleChangelog(commit *git.Commit) (map[string]
 		return nil, nil
 	}
 
-	var parentCommit *git.Commit
-	switch commit.ParentCount() {
-	case 1:
-		parentCommit = commit.Parent(0)
-	case 2:
-		// Merge commit
-
-		/*var mergeBase *git.Oid
-		mergeBase, err = r.repo.MergeBase(commit.ParentId(0), commit.ParentId(1))
-		if err != nil {
-			return nil, newError(err, "Failed to get merge base for merge commit")
-		}
-
-		parentCommit, err = r.repo.LookupCommit(mergeBase)
-		if err != nil {
-			return nil, newError(err, "Failed to lookup merge base commit", mergeBase)
-		}*/
-
-		return nil, errMerge
-	default:
-		return nil, errOctopusMerge
-	}
-
+	parentCommit := commit.Parent(0)
 	parentTree, err := parentCommit.Tree()
 	if err != nil {
 		return nil, newError(err, "Failed to open tree for parent commit", parentCommit)
@@ -179,14 +153,13 @@ func (r *Repository) generateSubmoduleChangelog(commit *git.Commit) (map[string]
 			continue
 		}
 
-		subRepo, err := r.Open(url)
+		subRepo, err := r.open(url)
 		if err != nil {
 			r.Log.Println("Failed to open submodule repo:", err)
 			continue
 		}
 
 		commits, err := subRepo.generateChangelog(subEntry.Id, parentSubEntry.Id)
-		subRepo.Close()
 		if err != nil {
 			r.Log.Println("Failed to generate submodule changelog:", err)
 		}

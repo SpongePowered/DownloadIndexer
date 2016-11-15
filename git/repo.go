@@ -3,6 +3,7 @@ package git
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"errors"
 	"github.com/Minecrell/SpongeDownloads/downloads"
 	"github.com/libgit2/git2go"
 	"os"
@@ -10,7 +11,7 @@ import (
 	"sync"
 )
 
-var nothing = struct{}{} // This is nothing!
+var errRepoOpen = errors.New("Failed to open repository")
 
 type Manager struct {
 	*downloads.Module
@@ -24,9 +25,13 @@ type Repository struct {
 	*Manager
 	url string
 
-	lock          sync.Mutex
-	repo          *git.Repository
+	lock sync.Mutex
+	repo *git.Repository
+
+	fetched       bool
 	failedCommits map[string]error
+
+	children map[string]*Repository
 }
 
 func Create(manager *downloads.Manager, dir string) (*Manager, error) {
@@ -61,6 +66,7 @@ func (m *Manager) Open(url string) (*Repository, error) {
 	}
 
 	result.lock.Lock()
+	result.children = make(map[string]*Repository)
 	return result, nil
 }
 
@@ -85,7 +91,25 @@ func (m *Manager) initRepo(url string) (*git.Repository, error) {
 	return git.Clone(url, dir, &git.CloneOptions{Bare: true})
 }
 
+func (r *Repository) open(url string) (*Repository, error) {
+	c, ok := r.children[url]
+	if !ok {
+		var err error
+		c, err = r.Open(url)
+		r.children[url] = c
+		return c, err
+	} else if c == nil {
+		return nil, errRepoOpen
+	}
+
+	return c, nil
+}
+
 func (r *Repository) fetchIfNotFound(err error) error {
+	if r.fetched {
+		return err
+	}
+
 	// Look closer at the error
 	gitError, ok := err.(*git.GitError)
 	if !ok {
@@ -93,6 +117,8 @@ func (r *Repository) fetchIfNotFound(err error) error {
 	}
 
 	if gitError.Code == git.ErrNotFound {
+		r.fetched = true
+
 		// Try to fetch the commit
 		err = r.fetch()
 	}
@@ -112,5 +138,13 @@ func (r *Repository) fetch() (err error) {
 }
 
 func (r *Repository) Close() {
+	r.fetched = false
+
+	// Close all children repositories
+	for _, c := range r.children {
+		c.Close()
+	}
+
+	r.children = nil
 	r.lock.Unlock()
 }
