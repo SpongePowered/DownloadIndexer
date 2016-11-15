@@ -270,6 +270,7 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 				var buildType, branch string
 				var metadataBytes []byte
 				var published time.Time
+				requireChangelog := true
 
 				if macaron.Env == macaron.DEV {
 					buildType, branch = ctx.Query("type"), ctx.Query("branch")
@@ -285,10 +286,14 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 							return httperror.BadRequest("Failed to parse published date", err)
 						}
 					}
+
+					if _, ok := ctx.Req.Form["requireChangelog"]; ok && !ctx.QueryBool("requireChangelog") {
+						requireChangelog = false
+					}
 				}
 
 				err = s.createDownload(i, p.displayVersion, data, buildType, branch, metadataBytes, published,
-					project.useSnapshots && !p.snapshot)
+					project.useSnapshots && !p.snapshot, requireChangelog)
 				if err != nil {
 					return err
 				}

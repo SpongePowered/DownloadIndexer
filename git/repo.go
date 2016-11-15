@@ -113,13 +113,7 @@ func (r *Repository) fetchIfNotFound(err error) error {
 		return err
 	}
 
-	// Look closer at the error
-	gitError, ok := err.(*git.GitError)
-	if !ok {
-		return err
-	}
-
-	if gitError.Code == git.ErrNotFound {
+	if isNotFound(err) {
 		r.fetched = true
 
 		// Try to fetch the commit
@@ -151,4 +145,9 @@ func (r *Repository) Close() {
 	r.root = nil
 	r.children = nil
 	r.lock.Unlock()
+}
+
+func isNotFound(err error) bool {
+	gitErr, ok := err.(*git.GitError)
+	return ok && gitErr.Code == git.ErrNotFound
 }

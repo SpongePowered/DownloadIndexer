@@ -8,8 +8,7 @@ import (
 func (r *Repository) readSubmodules(tree *git.Tree) (map[string]string, error) {
 	e, err := tree.EntryByPath(".gitmodules")
 	if err != nil {
-		gitErr, ok := err.(*git.GitError)
-		if ok && gitErr.Code == git.ErrNotFound {
+		if isNotFound(err) {
 			// Don't return error if no submodules exist
 			return nil, nil
 		}

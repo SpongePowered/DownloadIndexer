@@ -25,7 +25,8 @@ const (
 var nullTime = time.Time{}
 
 func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []byte,
-	buildType, branch string, metadataBytes []byte, publishedOverride time.Time, recommended bool) error {
+	buildType, branch string, metadataBytes []byte, publishedOverride time.Time,
+	recommended, requireChangelog bool) error {
 
 	manifest, published, metadata, err := readJar(mainJar, s.project.pluginID != "")
 	if err != nil {
@@ -125,7 +126,7 @@ func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []by
 
 		if parentCommit != "" {
 			// Parent commit found, generate changelog
-			changelog, err = i.generateChangelog(s.project, commit, parentCommit)
+			changelog, err = i.generateChangelog(s.project, commit, parentCommit, requireChangelog)
 			if err != nil {
 				return err
 			}
@@ -169,7 +170,7 @@ func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []by
 	return nil
 }
 
-func (i *Indexer) generateChangelog(p *project, commit string, parentCommit string) (string, error) {
+func (i *Indexer) generateChangelog(p *project, commit string, parentCommit string, require bool) (string, error) {
 	if commit == parentCommit {
 		// No changes
 		return emptyChangelog, nil
@@ -185,6 +186,10 @@ func (i *Indexer) generateChangelog(p *project, commit string, parentCommit stri
 
 	changelog, err := repo.GenerateChangelog(commit, parentCommit)
 	if err != nil {
+		if !require {
+			i.Log.Println("Failed to generate changelog:", err)
+			return "", nil // Ignore error
+		}
 		return "", httperror.InternalError("Git error (failed to generate changelog)", err)
 	}
 

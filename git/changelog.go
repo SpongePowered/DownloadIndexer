@@ -46,6 +46,12 @@ func (r *Repository) generateChangelog(id *git.Oid, parent *git.Oid) ([]*Commit,
 		return nil, err
 	}
 
+	// Check if there is a merge base between both commits (otherwise it will go back up to initial commit)
+	_, err := r.repo.MergeBase(id, parent)
+	if err != nil {
+		return nil, err
+	}
+
 	w, err := r.repo.Walk()
 	if err != nil {
 		return nil, err
