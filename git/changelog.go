@@ -153,7 +153,7 @@ func (r *Repository) generateSubmoduleChangelog(commit *git.Commit) (map[string]
 			continue
 		}
 
-		subRepo, err := r.open(url)
+		subRepo, err := r.root.open(url)
 		if err != nil {
 			r.Log.Println("Failed to open submodule repo:", err)
 			continue

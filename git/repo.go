@@ -31,6 +31,7 @@ type Repository struct {
 	fetched       bool
 	failedCommits map[string]error
 
+	root     *Repository
 	children map[string]*Repository
 }
 
@@ -66,6 +67,7 @@ func (m *Manager) Open(url string) (*Repository, error) {
 	}
 
 	result.lock.Lock()
+	result.root = result
 	result.children = make(map[string]*Repository)
 	return result, nil
 }
@@ -96,6 +98,7 @@ func (r *Repository) open(url string) (*Repository, error) {
 	if !ok {
 		var err error
 		c, err = r.Open(url)
+		c.root = r
 		r.children[url] = c
 		return c, err
 	} else if c == nil {
@@ -145,6 +148,7 @@ func (r *Repository) Close() {
 		c.Close()
 	}
 
+	r.root = nil
 	r.children = nil
 	r.lock.Unlock()
 }
