@@ -46,8 +46,23 @@ func (r *Repository) generateChangelog(id *git.Oid, parent *git.Oid) ([]*Commit,
 		return nil, err
 	}
 
+	// Lookup commit
+	_, err := r.repo.LookupCommit(id)
+	if err != nil {
+		err = r.fetchIfNotFound(err)
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = r.repo.LookupCommit(id)
+		if err != nil {
+			r.failedCommits[commitHash] = err
+			return nil, err
+		}
+	}
+
 	// Check if there is a merge base between both commits (otherwise it will go back up to initial commit)
-	_, err := r.repo.MergeBase(id, parent)
+	_, err = r.repo.MergeBase(id, parent)
 	if err != nil {
 		return nil, err
 	}
@@ -61,16 +76,7 @@ func (r *Repository) generateChangelog(id *git.Oid, parent *git.Oid) ([]*Commit,
 
 	err = w.Push(id)
 	if err != nil {
-		err = r.fetchIfNotFound(err)
-		if err != nil {
-			return nil, err
-		}
-
-		err = w.Push(id)
-		if err != nil {
-			r.failedCommits[commitHash] = err
-			return nil, err
-		}
+		return nil, err
 	}
 
 	if parent != nil {
