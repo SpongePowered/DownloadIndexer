@@ -21,9 +21,7 @@ type Metadata struct {
 
 	//Authors []string `json:"authors,omitempty"`
 
-	Dependencies []Dependency `json:"requiredMods,omitempty"`
-	//LoadBefore   []Dependency `json:"dependants,omitempty"`
-	//LoadAfter    []Dependency `json:"dependencies,omitempty"`
+	Dependencies []Dependency `json:"dependencies,omitempty"`
 }
 
 type Dependency struct {
