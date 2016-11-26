@@ -64,6 +64,7 @@ func (a *API) Setup(m *macaron.Macaron, renderer macaron.Handler) {
 func (a *API) addHeaders(resp http.ResponseWriter) {
 	header := resp.Header()
 	header.Add("Access-Control-Allow-Origin", "*")
+	header.Add("Cache-Control", "no-cache")
 
 	if a.Cache != nil {
 		a.Cache.AddHeaders(header)
