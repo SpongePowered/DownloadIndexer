@@ -5,12 +5,12 @@ EXPOSE 4000
 CMD ["SpongeDownloads"]
 ENV GIT_STORAGE_DIR /tmp/git
 
-COPY . /go/src/github.com/Minecrell/SpongeDownloads
+COPY . /go/src/github.com/SpongePowered/SpongeDownloads
 
 RUN apk add --no-cache libgit2 \
     && apk add --no-cache --virtual build-deps go gcc git musl-dev libgit2-dev \
     && export GOPATH=/go \
-    && go get -v github.com/Minecrell/SpongeDownloads \
+    && go get -v github.com/SpongePowered/SpongeDownloads \
     && apk del build-deps \
     && cp $GOPATH/bin/SpongeDownloads /usr/bin \
     && rm -rf $GOPATH

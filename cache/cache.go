@@ -2,7 +2,7 @@ package cache
 
 import (
 	"errors"
-	"github.com/Minecrell/SpongeDownloads/maven"
+	"github.com/SpongePowered/SpongeDownloads/maven"
 	"net/http"
 	"strings"
 )

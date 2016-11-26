@@ -1,10 +1,10 @@
 package main
 
 import (
-	"github.com/Minecrell/SpongeDownloads/downloads"
-	"github.com/Minecrell/SpongeDownloads/git"
-	"github.com/Minecrell/SpongeDownloads/indexer"
-	"github.com/Minecrell/SpongeDownloads/maven"
+	"github.com/SpongePowered/SpongeDownloads/downloads"
+	"github.com/SpongePowered/SpongeDownloads/git"
+	"github.com/SpongePowered/SpongeDownloads/indexer"
+	"github.com/SpongePowered/SpongeDownloads/maven"
 	"gopkg.in/macaron.v1"
 )
 

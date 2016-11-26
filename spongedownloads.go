@@ -2,11 +2,11 @@ package main
 
 import (
 	"database/sql"
-	"github.com/Minecrell/SpongeDownloads/auth"
-	"github.com/Minecrell/SpongeDownloads/cache"
-	"github.com/Minecrell/SpongeDownloads/db"
-	"github.com/Minecrell/SpongeDownloads/downloads"
-	"github.com/Minecrell/SpongeDownloads/httperror"
+	"github.com/SpongePowered/SpongeDownloads/auth"
+	"github.com/SpongePowered/SpongeDownloads/cache"
+	"github.com/SpongePowered/SpongeDownloads/db"
+	"github.com/SpongePowered/SpongeDownloads/downloads"
+	"github.com/SpongePowered/SpongeDownloads/httperror"
 	"gopkg.in/macaron.v1"
 	"net/http"
 	"os"

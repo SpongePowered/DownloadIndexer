@@ -3,9 +3,9 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
-	"github.com/Minecrell/SpongeDownloads/db"
-	"github.com/Minecrell/SpongeDownloads/httperror"
-	"github.com/Minecrell/SpongeDownloads/maven"
+	"github.com/SpongePowered/SpongeDownloads/db"
+	"github.com/SpongePowered/SpongeDownloads/httperror"
+	"github.com/SpongePowered/SpongeDownloads/maven"
 	"github.com/lib/pq"
 	"gopkg.in/macaron.v1"
 	"net/http"

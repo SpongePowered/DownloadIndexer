@@ -3,7 +3,7 @@ package cache
 import (
 	"errors"
 	"fmt"
-	"github.com/Minecrell/SpongeDownloads/maven"
+	"github.com/SpongePowered/SpongeDownloads/maven"
 	"net/http"
 	"strings"
 )

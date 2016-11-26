@@ -1,8 +1,8 @@
 package api
 
 import (
-	"github.com/Minecrell/SpongeDownloads/httperror"
-	"github.com/Minecrell/SpongeDownloads/maven"
+	"github.com/SpongePowered/SpongeDownloads/httperror"
+	"github.com/SpongePowered/SpongeDownloads/maven"
 	"gopkg.in/macaron.v1"
 	"net/http"
 	"time"

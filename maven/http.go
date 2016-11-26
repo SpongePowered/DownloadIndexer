@@ -1,7 +1,7 @@
 package maven
 
 import (
-	"github.com/Minecrell/SpongeDownloads/httperror"
+	"github.com/SpongePowered/SpongeDownloads/httperror"
 	"io"
 	"net/http"
 	"net/url"
