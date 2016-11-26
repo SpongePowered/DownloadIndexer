@@ -31,7 +31,7 @@ SpongeDownloads uses the following environment variables:
     - `null://` - Writes all uploaded files to `/dev/null`.
 
 - **API:**
-  - `API_URL`: URL to Maven repo, used for generating download URLs
+  - `REPO_URL`: URL to Maven repo, used for generating download URLs
     - `http://repo.example.com/maven`
 
 - **Cache:** (Optional)

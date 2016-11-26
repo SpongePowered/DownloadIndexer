@@ -98,7 +98,9 @@ func (r *Repository) open(url string) (*Repository, error) {
 	if !ok {
 		var err error
 		c, err = r.Open(url)
-		c.root = r
+		if c != nil {
+			c.root = r
+		}
 		r.children[url] = c
 		return c, err
 	} else if c == nil {
@@ -139,7 +141,9 @@ func (r *Repository) Close() {
 
 	// Close all children repositories
 	for _, c := range r.children {
-		c.Close()
+		if c != nil {
+			c.Close()
+		}
 	}
 
 	r.root = nil
