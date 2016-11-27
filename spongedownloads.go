@@ -7,6 +7,7 @@ import (
 	"github.com/SpongePowered/SpongeDownloads/db"
 	"github.com/SpongePowered/SpongeDownloads/downloads"
 	"github.com/SpongePowered/SpongeDownloads/httperror"
+	"github.com/SpongePowered/SpongeWebGo"
 	"gopkg.in/macaron.v1"
 	"net/http"
 	"os"
@@ -52,6 +53,9 @@ func main() {
 		m.Use(macaron.Logger())
 	}
 
+	m.Use(swg.AddHeaders)
+	m.Use(addHeaders)
+
 	renderer := macaron.Renderer(macaron.RenderOptions{IndentJSON: macaron.Env == macaron.DEV})
 
 	if redirectRoot := os.Getenv("REDIRECT_ROOT"); redirectRoot != "" {
@@ -79,6 +83,10 @@ func main() {
 	}
 
 	m.Run()
+}
+
+func addHeaders(resp http.ResponseWriter) {
+	resp.Header().Add("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
 }
 
 func setupDatabase() *sql.DB {

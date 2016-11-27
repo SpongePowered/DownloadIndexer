@@ -1,8 +1,9 @@
 package cache
 
 import (
-	"github.com/Minecrell/fastly-cache"
 	"github.com/SpongePowered/SpongeDownloads/maven"
+	"github.com/SpongePowered/SpongeWebGo/cache"
+	"github.com/SpongePowered/SpongeWebGo/fastly"
 	"log"
 	"net/http"
 )
@@ -12,7 +13,7 @@ type FastlyCache struct {
 }
 
 func (c *FastlyCache) AddHeaders(header http.Header) {
-	header.Add(fastly.SurrogateControlHeader, fastly.StaticContentOptions)
+	header.Add(fastly.SurrogateControlHeader, cache.StaticContentOptions)
 }
 
 func (c *FastlyCache) AddProjectHeaders(header http.Header, project maven.Identifier) {
