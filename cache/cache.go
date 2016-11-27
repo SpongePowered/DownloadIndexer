@@ -3,6 +3,8 @@ package cache
 import (
 	"errors"
 	"github.com/SpongePowered/SpongeDownloads/maven"
+	"gopkg.in/macaron.v1"
+	"log"
 	"net/http"
 	"strings"
 )
@@ -13,11 +15,13 @@ type Cache interface {
 	AddHeaders(header http.Header)
 	AddProjectHeaders(header http.Header, project maven.Identifier)
 
-	PurgeAll() error
-	PurgeProject(project maven.Identifier) error
+	LogHandler(fallback macaron.Handler) macaron.Handler
+
+	PurgeAll() bool
+	PurgeProject(project maven.Identifier) bool
 }
 
-func Create(config string) (Cache, error) {
+func Create(logger *log.Logger, config string) (Cache, error) {
 	pos := strings.IndexByte(config, cacheTypeSeparator)
 	if pos == -1 {
 		return nil, errors.New("Invalid cache config: " + config)
@@ -28,7 +32,7 @@ func Create(config string) (Cache, error) {
 
 	switch cacheType {
 	case "fastly":
-		return parseFastly(config)
+		return parseFastly(logger, config)
 	default:
 		return nil, errors.New("Unsupported cache type: " + cacheType)
 	}

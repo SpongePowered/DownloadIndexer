@@ -35,6 +35,6 @@ SpongeDownloads uses the following environment variables:
     - `http://repo.example.com/maven`
 
 - **Cache:** (Optional)
-  - `CACHE_PROXY`: Configure an additional reverse proxy to be used for additional caching. The application will
+  - `CACHE`: Configure an additional reverse proxy to be used for additional caching. The application will
     automatically handle purging the caches when a new download is added. Supported formats:
-    - `fastly:API_KEY/SERVICE_ID`
+    - `fastly:API_KEY/SERVICE_ID` with an optional `;healthcheck` option to hide Fastly health checks from the logs

@@ -1,4 +1,4 @@
-package main
+package main // import "github.com/SpongePowered/SpongeDownloads"
 
 import (
 	"database/sql"
@@ -27,9 +27,9 @@ func main() {
 	}
 
 	var c cache.Cache
-	if cacheConfig := os.Getenv("CACHE_PROXY"); cacheConfig != "" {
+	if cacheConfig := os.Getenv("CACHE"); cacheConfig != "" {
 		var err error
-		c, err = cache.Create(cacheConfig)
+		c, err = cache.Create(downloads.CreateLogger("Cache"), cacheConfig)
 		if err != nil {
 			logger.Fatalln(err)
 		}
@@ -43,8 +43,10 @@ func main() {
 
 	// Initialize web framework
 	m := macaron.New()
-	m.Use(macaron.Logger())
 	m.Map(httperror.Handler())
+
+	// Setup logging handler
+	setupLogging(m, c)
 
 	renderer := macaron.Renderer(macaron.RenderOptions{IndentJSON: macaron.Env == macaron.DEV})
 
@@ -90,6 +92,15 @@ func setupDatabase() *sql.DB {
 	}*/
 
 	return postgresDB
+}
+
+func setupLogging(m *macaron.Macaron, c cache.Cache) {
+	logHandler := macaron.Logger()
+	if c != nil {
+		logHandler = c.LogHandler(logHandler)
+	}
+
+	m.Use(logHandler)
 }
 
 func setupAuthentication(key string) macaron.Handler {

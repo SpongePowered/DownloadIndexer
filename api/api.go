@@ -48,14 +48,7 @@ func (a *API) Setup(m *macaron.Macaron, renderer macaron.Handler) {
 		renderer)
 
 	if a.Cache != nil {
-		go func() {
-			err := a.Cache.PurgeAll()
-			if err != nil {
-				a.Log.Println("Failed to purge cache:", err)
-			} else {
-				a.Log.Println("Cache purged successfully")
-			}
-		}()
+		go a.Cache.PurgeAll()
 	}
 
 	a.Start = time.Now().UTC().Truncate(time.Second)

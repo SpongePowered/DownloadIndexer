@@ -354,15 +354,7 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 			}()
 
 			if i.Cache != nil {
-				go func() {
-					// Purge cache
-					err := i.Cache.PurgeProject(p.Identifier)
-					if err != nil {
-						i.Log.Println("Failed to purge project cache:", err)
-					} else {
-						i.Log.Println("Successfully purged cache for project", p.Identifier)
-					}
-				}()
+				go i.Cache.PurgeProject(p.Identifier)
 			}
 
 			// We let the timeout do its work to cleanup the session
