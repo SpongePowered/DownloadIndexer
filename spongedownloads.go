@@ -46,7 +46,11 @@ func main() {
 	m.Map(httperror.Handler())
 
 	// Setup logging handler
-	setupLogging(m, c)
+	if c != nil {
+		m.Use(c.LogHandler())
+	} else {
+		m.Use(macaron.Logger())
+	}
 
 	renderer := macaron.Renderer(macaron.RenderOptions{IndentJSON: macaron.Env == macaron.DEV})
 
@@ -92,15 +96,6 @@ func setupDatabase() *sql.DB {
 	}*/
 
 	return postgresDB
-}
-
-func setupLogging(m *macaron.Macaron, c cache.Cache) {
-	logHandler := macaron.Logger()
-	if c != nil {
-		logHandler = c.LogHandler(logHandler)
-	}
-
-	m.Use(logHandler)
 }
 
 func setupAuthentication(key string) macaron.Handler {

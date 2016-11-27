@@ -15,7 +15,7 @@ type Cache interface {
 	AddHeaders(header http.Header)
 	AddProjectHeaders(header http.Header, project maven.Identifier)
 
-	LogHandler(fallback macaron.Handler) macaron.Handler
+	LogHandler() macaron.Handler
 
 	PurgeAll() bool
 	PurgeProject(project maven.Identifier) bool
