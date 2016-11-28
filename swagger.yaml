@@ -329,18 +329,21 @@ parameters:
   buildType:
     name: type
     in: query
-    description: Build type (e.g. stable)
+    description: Build type
     type: string
+    x-example: stable
   version:
     name: version
     in: query
-    description: Part of semantic version (e.g. 5)
+    description: Part of semantic version
     type: string
+    x-example: 5
   minecraft:
     name: minecraft
     in: query
-    description: Minecraft version (e.g. 1.10.2)
+    description: Minecraft version
     type: string
+    x-example: 1.10.2
   spongeapi:
     name: spongeapi
     in: query
@@ -349,8 +352,9 @@ parameters:
   forge:
     name: forge
     in: query
-    description: Forge version (e.g. 13.19.0.2157)
+    description: Forge version
     type: string
+    x-example: 13.19.0.2157
   limit:
     name: limit
     in: query
