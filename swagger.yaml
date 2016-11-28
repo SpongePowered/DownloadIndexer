@@ -311,18 +311,21 @@ parameters:
     required: true
     description: Group ID of the project
     type: string
+    x-example: org.spongepowered
   artifactId:
     name: artifactId
     in: path
     required: true
     description: Artifact ID of the project
     type: string
+    x-example: spongeapi
   buildVersion:
     name: version
     in: path
     required: true
     description: The version to check
     type: string
+    x-example: 5.0.0
   buildType:
     name: type
     in: query
