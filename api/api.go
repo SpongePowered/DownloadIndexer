@@ -11,6 +11,8 @@ import (
 	"time"
 )
 
+const v1Docs = "http://docs.spongedownloads.apiary.io"
+
 type API struct {
 	*downloads.Module
 	Repo string
@@ -32,6 +34,9 @@ func Create(m *downloads.Manager, repo string) *API {
 
 func (a *API) Setup(m *macaron.Macaron, renderer macaron.Handler) {
 	m.Group("/v1", func() {
+		m.Get("/", func(ctx *macaron.Context) {
+			ctx.Redirect(v1Docs)
+		})
 		m.Get("/projects", a.GetProjects)
 
 		m.Group("/:groupId/:artifactId", func() {

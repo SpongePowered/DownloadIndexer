@@ -1,4 +1,11 @@
 # SpongeDownloads
+SpongeDownloads is the download indexer for the Sponge project. It accepts uploaded builds as a standard Maven
+repository, indexes them and finally uploads it to the real Maven repository. It provides a REST API that is primarily
+used by [Sponge's download page](https://www.spongepowered.org/downloads), however it can be also used by other projects
+(e.g. hosting providers) to provide automated installation of Sponge builds.
+
+# API documentation
+API documentation is available on [Apiary](http://docs.spongedownloads.apiary.io).
 
 ## Running
 SpongeDownloads uses the following environment variables:
