@@ -1,0 +1,376 @@
+swagger: '2.0'
+
+info:
+  title: Sponge Downloads
+  description: API for accessing information about Sponge downloads
+  contact:
+    name: Sponge
+    url: 'https://github.com/SpongePowered/SpongeDownloads/issues'
+  license:
+    name: MIT License
+  version: 1.0.0
+
+host: dl-api.spongepowered.org
+basePath: /v1
+schemes:
+  - https
+
+produces:
+  - application/json
+
+paths:
+  /projects:
+    get:
+      summary: Get a list of available projects
+      responses:
+        200:
+          description: OK
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/ProjectIdentifier'
+            example:
+              - groupId: 'org.spongepowered'
+                artifactId: 'spongevanilla'
+              - groupId: 'org.spongepowered'
+                artifactId: 'spongeforge'
+              - groupId: 'org.spongepowered'
+                artifactId: 'spongeapi'
+
+  /{groupId}/{artifactId}:
+    get:
+      summary: Get project information
+      responses:
+        200:
+          description: OK
+          schema:
+            $ref: '#/definitions/Project'
+    parameters:
+      - $ref: '#/parameters/groupId'
+      - $ref: '#/parameters/artifactId'
+
+  /{groupId}/{artifactId}/downloads:
+    get:
+      summary: List latest project downloads
+      responses:
+        200:
+          description: OK
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/Download'
+      parameters:
+        - $ref: '#/parameters/groupId'
+        - $ref: '#/parameters/artifactId'
+        - $ref: '#/parameters/buildType'
+        - $ref: '#/parameters/version'
+        - $ref: '#/parameters/minecraft'
+        - $ref: '#/parameters/forge'
+        - $ref: '#/parameters/limit'
+        - $ref: '#/parameters/until'
+        - $ref: '#/parameters/since'
+        - $ref: '#/parameters/changelog'
+
+  /{groupId}/{artifactId}/downloads/{version}:
+    get:
+      summary: Show information about a specific version
+      responses:
+        200:
+          description: OK
+          schema:
+            $ref: '#/definitions/Download'
+        404:
+          description: Build not found
+      parameters:
+        - $ref: '#/parameters/groupId'
+        - $ref: '#/parameters/artifactId'
+        - $ref: '#/parameters/buildVersion'
+  
+  /{groupId}/{artifactId}/downloads/recommended:
+    get:
+      summary: Find the latest recommended build for a specific filter
+      responses:
+        200:
+          description: OK
+          schema:
+            $ref: '#/definitions/Download'
+        404:
+          description: No recommended build found
+      parameters:
+        - $ref: '#/parameters/groupId'
+        - $ref: '#/parameters/artifactId'
+        - $ref: '#/parameters/buildType'
+        - $ref: '#/parameters/version'
+        - $ref: '#/parameters/minecraft'
+        - $ref: '#/parameters/forge'
+        
+
+definitions:
+  ProjectIdentifier:
+    type: object
+    required:
+      - groupId
+      - artifactId
+    properties:
+      groupId:
+        type: string
+      artifactId:
+        type: string
+    example:
+      groupId: org.spongepowered
+      artifactId: spongeapi
+
+  GitHubLocation:
+    type: object
+    required:
+      - owner
+      - repo
+    properties:
+      owner:
+        type: string
+      repo:
+        type: string
+  
+  Dependencies:
+    type: object
+    additionalProperties:
+      type: string
+
+  Build:
+    type: object
+    required:
+      - version
+    properties:
+      version:
+        type: string
+      dependencies:
+        $ref: '#/definitions/Dependencies'
+
+  BuildType:
+    type: object
+    properties:
+      latest:
+        $ref: '#/definitions/Build'
+      recommended:
+        $ref: '#/definitions/Build'
+
+  Project:
+    type: object
+    required:
+      - name
+      - buildTypes
+      - github
+    properties:
+      name:
+        type: string
+        description: Display name
+      pluginId:
+        type: string
+      github:
+        $ref: '#/definitions/GitHubLocation'
+      buildTypes:
+        type: object
+        additionalProperties:
+          $ref: '#/definitions/BuildType'
+      versions:
+        type: array
+        items:
+          type: string
+      dependencies:
+        type: object
+        additionalProperties:
+          type: array
+          items:
+            type: string
+    example:
+      name: SpongeVanilla
+      pluginId: sponge
+      github:
+        owner: SpongePowered
+        repo: SpongeVanilla
+      buildTypes:
+        stable:
+          latest:
+            version: 1.10.2-5.1.0-BETA-357
+            dependencies:
+              minecraft: 1.10.2
+              spongeapi: 5.1.0-SNAPSHOT-a146c67        
+        bleeding:
+          latest:
+            version: 1.10.2-6.0.0-BETA-161
+            dependencies:
+              minecraft: 1.10.2
+              spongeapi: 6.0.0-SNAPSHOT-afc1599
+
+  Download:
+    type: object
+    required:
+      - version
+      - type
+      - published
+      - commit
+      - artifacts
+    properties:
+      version:
+        type: string
+      published:
+        type: string
+        description: Time the download was uploaded
+        format: date-time
+      type:
+        type: string
+        description: Build type
+      commit:
+        type: string
+      label:
+        type: string
+      dependencies:
+        $ref: '#/definitions/Dependencies'
+      artifacts:
+        type: object
+        additionalProperties:
+          $ref: '#/definitions/Artifact'
+      changelog:
+        $ref: '#/definitions/Changelog'
+    example:
+      version: 1.10.2-6.0.0-BETA-161
+      type: bleeding
+      published: '2016-11-19T18:27:00+01:00'
+      commit: 4c45c9c4064b0c60e12b7bdf130542786bcb2b36
+      dependencies:
+        minecraft: 1.10.2
+        spongeapi: 6.0.0-SNAPSHOT-afc1599
+      artifacts:
+        '':
+          url: https://repo.spongepowered.org/maven/org/spongepowered/spongevanilla/1.10.2-6.0.0-BETA-161/spongevanilla-1.10.2-6.0.0-BETA-161.jar
+          size: 17998067
+          sha1: fe52ca1641b1a8bdc5c6cc9708f17ebf22e832e3
+          md5: 8a6e08bd619064139da249526eea98b1
+        dev:
+          url: https://repo.spongepowered.org/maven/org/spongepowered/spongevanilla/1.10.2-6.0.0-BETA-161/spongevanilla-1.10.2-6.0.0-BETA-161-dev.jar
+          size: 6234427
+          sha1: 0d66c0ef1713b9f75ec2f617bbfcff94d1d842ce
+          md5: 490804e36760ccb1c51f0c5f0004ae8e
+        sources:
+          url: https://repo.spongepowered.org/maven/org/spongepowered/spongevanilla/1.10.2-6.0.0-BETA-161/spongevanilla-1.10.2-6.0.0-BETA-161-sources.jar
+          size: 6496935
+          sha1: 374688eb6b298f4fdbf67276b16d7d05cf34f118
+          md5: 2f3e47e9c48798f30f1274da900b80c5
+
+  Artifact:
+    type: object
+    required:
+      - url
+      - size
+    properties:
+      url:
+        type: string
+        description: Download URL
+      size:
+        type: string
+        description: Size of artifact (in bytes)
+      sha1:
+        type: string
+      md5:
+        type: string
+  
+  Changelog:
+    type: array
+    items:
+      $ref: '#/definitions/Commit'
+
+  Commit:
+    type: object
+    required:
+      - id
+      - author
+      - date
+      - title
+    properties:
+      id:
+        type: string
+      author:
+        type: string
+      date:
+        type: string
+        format: date-time
+      title:
+        type: string
+      description:
+        type: string
+      submodules:
+        type: object
+        additionalProperties:
+          $ref: '#/definitions/Changelog'
+
+
+parameters:
+  groupId:
+    name: groupId
+    in: path
+    required: true
+    description: Group ID of the project
+    type: string
+  artifactId:
+    name: artifactId
+    in: path
+    required: true
+    description: Artifact ID of the project
+    type: string
+  buildVersion:
+    name: version
+    in: path
+    required: true
+    description: The version to check
+    type: string
+  buildType:
+    name: type
+    in: query
+    description: Build type (e.g. stable)
+    type: string
+  version:
+    name: version
+    in: query
+    description: Part of semantic version (e.g. 5)
+    type: string
+  minecraft:
+    name: minecraft
+    in: query
+    description: Minecraft version (e.g. 1.10.2)
+    type: string
+  spongeapi:
+    name: spongeapi
+    in: query
+    description: API version
+    type: string
+  forge:
+    name: forge
+    in: query
+    description: Forge version (e.g. 13.19.0.2157)
+    type: string
+  limit:
+    name: limit
+    in: query
+    description: Max number of returned items
+    type: integer
+    minimum: 1
+    maximum: 100
+    default: 100
+  until:
+    name: until
+    in: query
+    description: Maximum date for latest build (exclusive)
+    type: string
+    format: date-time
+  since:
+    name: since
+    in: query
+    description: Minimum date for latest build (inclusive)
+    type: string
+    format: date-time
+  changelog:
+    name: changelog
+    in: query
+    description: Include changelog
+    type: boolean
+    default: false
