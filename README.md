@@ -5,7 +5,7 @@ used by [Sponge's download page](https://www.spongepowered.org/downloads), howev
 (e.g. hosting providers) to provide automated installation of Sponge builds.
 
 # API documentation
-API documentation is available on [Apiary](http://docs.spongedownloads.apiary.io).
+API documentation is available on [Apiary](https://dl-api.spongepowered.org/v1).
 
 ## Running
 SpongeDownloads uses the following environment variables:
