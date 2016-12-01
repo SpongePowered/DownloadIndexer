@@ -26,8 +26,6 @@ const (
 	sessionCookieName   = "IndexerSession"
 	sessionSecretLength = 32
 	sessionTimeout      = 5 * time.Minute
-
-	httpStatusFailedDependency = 424
 )
 
 var semVerPattern = regexp.MustCompile(
@@ -178,7 +176,7 @@ func (i *Indexer) Get(ctx *macaron.Context) error {
 	defer s.unlock()
 
 	if s.failed {
-		return httperror.New(httpStatusFailedDependency, "Previous request failed", nil)
+		return httperror.New(http.StatusFailedDependency, "Previous request failed", nil)
 	}
 
 	if p.t == file && meta.session != s.id {
@@ -238,7 +236,7 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 	defer s.unlock()
 
 	if s.failed {
-		return httperror.New(httpStatusFailedDependency, "Previous request failed", nil)
+		return httperror.New(http.StatusFailedDependency, "Previous request failed", nil)
 	}
 
 	// Read file from request body (with the specified length)
