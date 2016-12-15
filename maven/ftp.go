@@ -51,10 +51,9 @@ func (repo *ftpRepository) Download(path string, writer io.Writer) error {
 			code = http.StatusNotFound
 		case ftpErr.Timeout():
 			code = http.StatusGatewayTimeout
-		case ftpErr.Temporary():
-			code = http.StatusServiceUnavailable
 		}
 	}
+
 
 	return httperror.New(code, "Failed to download file", err)
 }
