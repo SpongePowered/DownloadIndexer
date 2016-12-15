@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 )
 
 // Expose Timeout() method of goftp.Error via interface
@@ -16,6 +17,10 @@ type ftpError interface {
 
 func createFTP(url *url.URL) (*ftpRepository, error) {
 	var config goftp.Config
+
+	if os.Getenv("FTP_DEBUG") != "" {
+		config.Logger = os.Stdout
+	}
 
 	if url.User != nil {
 		config.User = url.User.Username()
@@ -53,7 +58,6 @@ func (repo *ftpRepository) Download(path string, writer io.Writer) error {
 			code = http.StatusGatewayTimeout
 		}
 	}
-
 
 	return httperror.New(code, "Failed to download file", err)
 }
