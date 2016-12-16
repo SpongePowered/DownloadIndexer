@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 )
 
 // Expose Timeout() method of goftp.Error via interface
@@ -16,7 +17,9 @@ type ftpError interface {
 }
 
 func createFTP(url *url.URL) (*ftpRepository, error) {
-	var config goftp.Config
+	config := goftp.Config{
+		ConnectionsPerHost: 3,
+	}
 
 	if os.Getenv("FTP_DEBUG") != "" {
 		config.Logger = os.Stdout
@@ -43,9 +46,21 @@ type ftpRepository struct {
 func (repo *ftpRepository) Download(path string, writer io.Writer) error {
 	path = repo.basePath + path
 
-	err := repo.ftp.Retrieve(path, writer)
-	if err == nil {
-		return nil
+	// Retrieve can fail after the FTP connection has not been used for a while (due to timeouts)
+	// To prevent this, we attempt retrieving it for 3 times before failing the request
+	var err error
+	for i := 0; i < 3; i++ {
+		err = repo.ftp.Retrieve(path, writer)
+		if err == nil {
+			return nil
+		}
+
+		if ftpErr, ok := err.(ftpError); ok && ftpErr.Temporary() && strings.HasPrefix(ftpErr.Message(), "Timeout") {
+			continue
+		}
+
+		// We can stop trying because the error is not recoverable
+		break
 	}
 
 	code := http.StatusBadGateway
@@ -77,7 +92,7 @@ func (repo *ftpRepository) Upload(path string, reader io.Reader) error {
 
 func (repo *ftpRepository) createPath(path string) {
 	for i, c := range path {
-		if c == '/' {
+		if i > 0 && c == '/' {
 			// Ignore errors since the directories may already exist
 			repo.ftp.Mkdir(path[:i])
 		}
