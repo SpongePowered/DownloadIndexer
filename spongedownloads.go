@@ -64,10 +64,6 @@ func main() {
 		})
 	}
 
-	if statusz := statuszHandler(); statusz != nil {
-		m.Get("/statusz", renderer, statusz)
-	}
-
 	if enableIndexer {
 		logger.Println("Starting indexer")
 		setupIndexer(manager, m)
