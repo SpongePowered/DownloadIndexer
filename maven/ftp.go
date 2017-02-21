@@ -55,12 +55,13 @@ func (repo *ftpRepository) Download(path string, writer io.Writer) error {
 			return nil
 		}
 
-		if ftpErr, ok := err.(ftpError); ok && ftpErr.Temporary() && strings.HasPrefix(ftpErr.Message(), "Timeout") {
+		continue
+		/*if ftpErr, ok := err.(ftpError); ok && ftpErr.Temporary() && strings.HasPrefix(ftpErr.Message(), "Timeout") {
 			continue
 		}
 
 		// We can stop trying because the error is not recoverable
-		break
+		break*/
 	}
 
 	code := http.StatusBadGateway
