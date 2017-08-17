@@ -25,7 +25,7 @@ const (
 var nullTime = time.Time{}
 
 func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []byte,
-	buildType, branch string, metadataBytes []byte, publishedOverride time.Time,
+	branch string, metadataBytes []byte, publishedOverride time.Time,
 	recommended, requireChangelog bool) error {
 
 	manifest, published, metadata, err := readJar(mainJar, s.project.pluginID != "")
@@ -85,51 +85,46 @@ func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []by
 		return httperror.BadRequest("Branch should not contain a slash", nil)
 	}
 
-	if buildType == "" {
-		buildType = substringBefore(branch, buildTypeSeparator)
-	}
-
-	var buildTypeID int
-	var allowsPromotion bool
-	err = i.DB.QueryRow("SELECT build_type_id, allows_promotion FROM build_types "+
-		"JOIN project_build_types USING(build_type_id) "+
-		"WHERE project_id = $1 AND name = $2;",
-		s.project.id, buildType).Scan(&buildTypeID, &allowsPromotion)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return httperror.BadRequest("Unknown build type", err)
-		}
-		return httperror.InternalError("Database error (failed to lookup build type)", err)
-	}
-
-	if recommended && !allowsPromotion {
-		return httperror.BadRequest("Build type does not allow promotion", err)
-	}
-
 	// Start transaction
 	s.tx, err = i.DB.Begin()
 	if err != nil {
 		return httperror.InternalError("Database error (failed to start transaction)", err)
 	}
 
-	var changelog string
+	branchID, buildTypeID, err := s.findOrCreateBranch(i, branch)
+	if err != nil {
+		return err
+	}
 
-	// Attempt to find parent commit
-	if buildTypeID > 0 {
-		var parentCommit string
-		err = s.tx.QueryRow("SELECT commit FROM downloads "+
-			"WHERE project_id = $1 AND build_type_id = $2 ORDER BY published DESC LIMIT 1;",
-			s.project.id, buildTypeID).Scan(&parentCommit)
-		if err != nil && err != sql.ErrNoRows {
-			return httperror.InternalError("Database error (failed to lookup parent commit)", err)
+	if recommended {
+		var allowsPromotion bool
+		// Check if we actually allow promotion on this build type
+		err = s.tx.QueryRow("SELECT allows_promotion FROM build_types WHERE build_type_id = $1;",
+			buildTypeID).Scan(&allowsPromotion)
+		if err != nil {
+			return httperror.InternalError("Database error (failed to verify release)", err)
 		}
 
-		if parentCommit != "" {
-			// Parent commit found, generate changelog
-			changelog, err = i.generateChangelog(s.project, commit, parentCommit, requireChangelog)
-			if err != nil {
-				return err
-			}
+		if !allowsPromotion {
+			return httperror.BadRequest("Build type does not allow promotion", err)
+		}
+	}
+
+	// Generate changelog if we find a parent commit
+	var changelog string
+	var parentCommit string
+	err = s.tx.QueryRow("SELECT commit FROM downloads "+
+		"WHERE project_id = $1 AND branch_id = $2 ORDER BY published DESC LIMIT 1;",
+		s.project.id, branchID).Scan(&parentCommit)
+	if err != nil && err != sql.ErrNoRows {
+		return httperror.InternalError("Database error (failed to lookup parent commit)", err)
+	}
+
+	if parentCommit != "" {
+		// Parent commit found, generate changelog
+		changelog, err = i.generateChangelog(s.project, commit, parentCommit, requireChangelog)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -143,9 +138,8 @@ func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []by
 		snapshotVersion = ""
 	}
 
-	err = s.tx.QueryRow("INSERT INTO downloads VALUES (DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9) "+
-		"RETURNING download_id;",
-		s.project.id, buildTypeID, displayVersion, db.ToNullString(snapshotVersion), published, branch, commit,
+	err = s.tx.QueryRow("INSERT INTO downloads VALUES (DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8) RETURNING download_id;",
+		s.project.id, branchID, displayVersion, db.ToNullString(snapshotVersion), published, commit,
 		db.ToNullString(label), db.ToNullString(changelog)).Scan(&s.downloadID)
 	if err != nil {
 		return httperror.InternalError("Database error (failed to add download)", err)
@@ -168,6 +162,46 @@ func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []by
 	}
 
 	return nil
+}
+
+func (s *session) findOrCreateBranch(i *Indexer, branch string) (branchID int, buildTypeID int, err error) {
+	// Lookup branch
+	err = s.tx.QueryRow("SELECT branch_id, build_type_id FROM branches WHERE project_id = $1 AND name = $2;",
+		s.project.id, branch).Scan(&branchID, &buildTypeID)
+	switch {
+	case err == nil:
+		return
+	case err != sql.ErrNoRows:
+		err = httperror.InternalError("Database error (Failed to lookup branch", err)
+		return
+	}
+
+	buildType := substringBefore(branch, buildTypeSeparator)
+
+	// Create branch
+	i.Log.Println("Registering new branch", branch, "with build type", buildType)
+
+	// Find build type
+	err = s.tx.QueryRow("SELECT build_type_id FROM build_types " +
+		"JOIN project_build_types USING(build_type_id) " +
+		"WHERE project_id = $1 AND name = $2;",
+		s.project.id, buildType).Scan(&buildTypeID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			err = httperror.BadRequest("Unknown build type", err)
+		} else {
+			err = httperror.InternalError("Database error (failed to lookup build type)", err)
+		}
+		return
+	}
+
+	err = s.tx.QueryRow("INSERT INTO branches VALUES(DEFAULT, $1, $2, $3) RETURNING branch_id;",
+		buildTypeID, s.project.id, branch).Scan(&branchID)
+	if err != nil {
+		err = httperror.InternalError("Database error (failed to create branch)", err)
+	}
+
+	return
 }
 
 func (i *Indexer) generateChangelog(p *project, commit string, parentCommit string, require bool) (string, error) {

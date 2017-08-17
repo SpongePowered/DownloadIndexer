@@ -268,13 +268,13 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 
 			if main {
 				// Override query params (e.g. to index older builds)
-				var buildType, branch string
+				var branch string
 				var metadataBytes []byte
 				var published time.Time
 				requireChangelog := true
 
 				if macaron.Env == macaron.DEV {
-					buildType, branch = ctx.Query("type"), ctx.Query("branch")
+					branch = ctx.Query("branch")
 
 					if metadataSize := ctx.QueryInt("mcmodMetadataSize"); metadataSize > 0 {
 						metadataBytes = data[:metadataSize]
@@ -293,7 +293,7 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 					}
 				}
 
-				err = s.createDownload(i, p.displayVersion, data, buildType, branch, metadataBytes, published,
+				err = s.createDownload(i, p.displayVersion, data, branch, metadataBytes, published,
 					project.useSnapshots && !p.snapshot, requireChangelog)
 				if err != nil {
 					return err

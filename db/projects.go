@@ -13,14 +13,19 @@ func setupProjects(db *sql.DB) error {
 		return err
 	}
 
+	unstable, err := setupBuildType(db, "unstable", false)
+	if err != nil {
+		return err
+	}
+
 	err = setupProject(db, "SpongeVanilla", "org.spongepowered", "spongevanilla", "sponge", "SpongePowered", "SpongeVanilla",
-		false, false, stable, bleeding)
+		false, false, stable, bleeding, unstable)
 	if err != nil {
 		return err
 	}
 
 	err = setupProject(db, "SpongeForge", "org.spongepowered", "spongeforge", "sponge", "SpongePowered", "SpongeForge",
-		false, false, stable, bleeding)
+		false, false, stable, bleeding, unstable)
 	if err != nil {
 		return err
 	}
@@ -57,5 +62,7 @@ func setupProject(db *sql.DB, name, groupID, artifactID, pluginID, githubOwner, 
 		}
 	}
 
-	return nil
+	// Setup branch for "master" for all older builds
+	_, err = db.Exec("INSERT INTO branches VALUES(DEFAULT, $1, $2, $3, $4);", buildTypes[0], projectID, "master", false)
+	return err
 }
