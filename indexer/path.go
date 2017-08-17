@@ -123,6 +123,9 @@ func parsePath(path string, parseArtifact bool) (p path, err error) {
 		}
 
 		p.artifact.extension = filename[1:]
+
+	} else if strings.HasSuffix(p.version, snapshotSuffix) {
+		p.snapshot = true
 	}
 
 	return
