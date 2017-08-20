@@ -20,17 +20,19 @@ type project struct {
 		Repo  string `json:"repo"`
 	} `json:"github"`
 
-	BuildTypes map[string]*buildType `json:"buildTypes,omitempty"`
+	Branches map[string]*branch `json:"branches,omitempty"`
 
 	Versions     versions            `json:"versions,omitempty"`
 	Dependencies map[string]versions `json:"dependencies,omitempty"`
 }
 
-type buildType struct {
+type branch struct {
 	id int
 
-	Latest      *build `json:"latest,omitempty"`
-	Recommended *build `json:"recommended,omitempty"`
+	BuildType   string    `json:"buildType"`
+	Created     time.Time `json:"created"`
+	Latest      *build    `json:"latest,omitempty"`
+	Recommended *build    `json:"recommended,omitempty"`
 }
 
 type build struct {
@@ -41,7 +43,7 @@ type build struct {
 }
 
 func (a *API) GetProject(ctx *macaron.Context, c maven.Identifier) error {
-	p := project{BuildTypes: make(map[string]*buildType), Dependencies: make(map[string]versions)}
+	p := project{Branches: make(map[string]*branch), Dependencies: make(map[string]versions)}
 	var projectID int
 	var useSemVer bool
 	var lastUpdated time.Time
@@ -67,35 +69,35 @@ func (a *API) GetProject(ctx *macaron.Context, c maven.Identifier) error {
 		return nil
 	}
 
-	// Get build types
-	rows, err := a.DB.Query("SELECT build_type_id, name FROM build_types "+
-		"JOIN project_build_types USING(build_type_id) WHERE project_id = $1;", projectID)
+	// Get all active branches
+	rows, err := a.DB.Query("SELECT branch_id, branches.name, build_types.name, created FROM branches "+
+		"JOIN build_types USING(build_type_id) WHERE project_id = $1 AND active;", projectID)
 	if err != nil {
-		return httperror.InternalError("Database error (failed to lookup build types)", err)
+		return httperror.InternalError("Database error (failed to lookup branches)", err)
 	}
 
 	for rows.Next() {
-		bt := new(buildType)
+		b := new(branch)
 		var name string
-		err = rows.Scan(&bt.id, &name)
+		err = rows.Scan(&b.id, &name, &b.BuildType, &b.Created)
 		if err != nil {
-			return httperror.InternalError("Database error (failed to read build type)", err)
+			return httperror.InternalError("Database error (failed to read branch)", err)
 		}
 
-		p.BuildTypes[name] = bt
+		p.Branches[name] = b
 	}
 
-	// Get latest download for each build type
-	rows, err = a.DB.Query("SELECT build_type_id, label, download_id, version FROM downloads "+
-		"WHERE (build_type_id, coalesce(label, ''), published) IN ("+
-		"SELECT build_type_id, coalesce(label, ''), MAX(published) FROM downloads "+
-		"WHERE project_id = $1 GROUP BY build_type_id, label)"+
+	// Get latest download for each branch
+	rows, err = a.DB.Query("SELECT branch_id, label, download_id, version FROM downloads "+
+		"WHERE (branch_id, coalesce(label, ''), published) IN ("+
+		"SELECT branch_id, coalesce(label, ''), MAX(published) FROM downloads "+
+		"WHERE project_id = $1 GROUP BY branch_id, label)"+
 		"ORDER BY published DESC;", projectID)
 	if err != nil {
 		return httperror.InternalError("Database error (failed to get latest downloads)", err)
 	}
 
-	downloadIDs := make([]int64, 0, len(p.BuildTypes))
+	downloadIDs := make([]int64, 0, len(p.Branches))
 
 rows:
 	for rows.Next() {
@@ -108,8 +110,8 @@ rows:
 			return httperror.InternalError("Database error (failed to read latest download)", err)
 		}
 
-		for _, bt := range p.BuildTypes {
-			if bt.id == buildTypeID {
+		for _, b := range p.Branches {
+			if b.id == buildTypeID {
 				build := &build{
 					id:           downloadID,
 					Version:      version,
@@ -117,13 +119,13 @@ rows:
 				}
 
 				if label == nil {
-					if bt.Latest == nil {
-						bt.Latest = build
+					if b.Latest == nil {
+						b.Latest = build
 					}
 				} else if *label == "recommended" {
-					bt.Recommended = build
-					if bt.Latest == nil {
-						bt.Latest = build // Use recommended as fallback for latest
+					b.Recommended = build
+					if b.Latest == nil {
+						b.Latest = build // Use recommended as fallback for latest
 					}
 				}
 
@@ -132,7 +134,8 @@ rows:
 			}
 		}
 
-		return httperror.InternalError("Found unknown build type ID", nil)
+		// Skip download from inactive branch
+		// TODO: Exclude them from the query above?
 	}
 
 	// Get dependencies for latest builds
@@ -149,12 +152,12 @@ rows:
 			return httperror.InternalError("Database error (failed to read latest dependency)", err)
 		}
 
-		for _, bt := range p.BuildTypes {
+		for _, b := range p.Branches {
 			switch {
-			case bt.Latest != nil && bt.Latest.id == downloadID:
-				bt.Latest.Dependencies[name] = version
-			case bt.Recommended != nil && bt.Recommended.id == downloadID:
-				bt.Recommended.Dependencies[name] = version
+			case b.Latest != nil && b.Latest.id == downloadID:
+				b.Latest.Dependencies[name] = version
+			case b.Recommended != nil && b.Recommended.id == downloadID:
+				b.Recommended.Dependencies[name] = version
 			}
 		}
 	}

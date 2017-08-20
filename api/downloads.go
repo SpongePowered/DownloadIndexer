@@ -23,6 +23,7 @@ type download struct {
 	Version         string `json:"version"`
 	snapshotVersion *string
 	Published       time.Time `json:"published"`
+	Branch          string    `json:"branch"`
 	Type            string    `json:"type"`
 	Commit          string    `json:"commit"`
 	Label           *string   `json:"label,omitempty"`
@@ -131,19 +132,21 @@ func (a *API) createDownloadQuery(ctx *macaron.Context, project maven.Identifier
 }
 
 func (q *downloadQuery) init(dependencies bool) {
-	q.builder.Append("SELECT download_id, build_types.name, downloads.version, snapshot_version, published, commit, label")
+	q.builder.Append("SELECT download_id, branches.name, build_types.name, downloads.version, snapshot_version, published, commit, label")
 
 	if q.changelog {
 		q.builder.Append(", changelog")
 	}
 
-	q.builder.Append(" FROM downloads JOIN build_types USING(build_type_id)")
+	q.builder.Append(" FROM downloads " +
+		"JOIN branches USING(branch_id) " +
+		"JOIN build_types USING(build_type_id)")
 
 	if dependencies {
 		q.builder.Append(" JOIN dependencies USING(download_id)")
 	}
 
-	q.builder.Parameter(" WHERE project_id = ", q.projectID)
+	q.builder.Parameter(" WHERE downloads.project_id = ", q.projectID)
 }
 
 func (a *API) filterDownloads(ctx *macaron.Context, project maven.Identifier, extended bool, label string) ([]*download, error) {
@@ -273,10 +276,10 @@ func (q *downloadQuery) Read(a *API, project maven.Identifier) ([]*download, err
 		var changelogJSON []byte
 
 		if q.changelog {
-			err = rows.Scan(&id, &dl.Type, &dl.Version, &dl.snapshotVersion, &dl.Published, &dl.Commit, &dl.Label,
+			err = rows.Scan(&id, &dl.Branch, &dl.Type, &dl.Version, &dl.snapshotVersion, &dl.Published, &dl.Commit, &dl.Label,
 				&changelogJSON)
 		} else {
-			err = rows.Scan(&id, &dl.Type, &dl.Version, &dl.snapshotVersion, &dl.Published, &dl.Commit, &dl.Label)
+			err = rows.Scan(&id, &dl.Branch, &dl.Type, &dl.Version, &dl.snapshotVersion, &dl.Published, &dl.Commit, &dl.Label)
 		}
 
 		if err != nil {

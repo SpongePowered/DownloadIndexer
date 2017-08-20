@@ -77,8 +77,8 @@ type session struct {
 	timeout *time.Timer
 
 	lockedProject bool
-	projectMeta metaState
-	versionMeta metaState
+	projectMeta   metaState
+	versionMeta   metaState
 
 	_lock sync.Mutex
 }

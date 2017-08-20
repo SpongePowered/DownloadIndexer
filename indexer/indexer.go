@@ -140,7 +140,7 @@ func (s *session) createDownload(i *Indexer, displayVersion string, mainJar []by
 
 	err = s.tx.QueryRow("INSERT INTO downloads VALUES (DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8) RETURNING download_id;",
 		s.project.id, branchID, displayVersion, db.ToNullString(snapshotVersion), published, commit,
-		db.ToNullString(label), db.ToNullString(changelog)).Scan(&s.downloadID)
+		db.ToNullString(changelog), db.ToNullString(label)).Scan(&s.downloadID)
 	if err != nil {
 		return httperror.InternalError("Database error (failed to add download)", err)
 	}
@@ -182,8 +182,8 @@ func (s *session) findOrCreateBranch(i *Indexer, branch string) (branchID int, b
 	i.Log.Println("Registering new branch", branch, "with build type", buildType)
 
 	// Find build type
-	err = s.tx.QueryRow("SELECT build_type_id FROM build_types " +
-		"JOIN project_build_types USING(build_type_id) " +
+	err = s.tx.QueryRow("SELECT build_type_id FROM build_types "+
+		"JOIN project_build_types USING(build_type_id) "+
 		"WHERE project_id = $1 AND name = $2;",
 		s.project.id, buildType).Scan(&buildTypeID)
 	if err != nil {

@@ -44,6 +44,7 @@ func createTables(db *sql.DB) error {
 			name TEXT NOT NULL,
 			UNIQUE(project_id, name),
 
+		  	created TIMESTAMP(0) WITH TIME ZONE NOT NULL DEFAULT current_timestamp,
 			active BOOLEAN NOT NULL DEFAULT TRUE
 		);
 
@@ -61,7 +62,8 @@ func createTables(db *sql.DB) error {
 
 			label TEXT,
 
-			UNIQUE(project_id, version)
+			UNIQUE(project_id, version),
+			UNIQUE(branch_id, published)
 		);
 
 		CREATE TABLE dependencies (

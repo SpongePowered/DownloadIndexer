@@ -63,6 +63,6 @@ func setupProject(db *sql.DB, name, groupID, artifactID, pluginID, githubOwner, 
 	}
 
 	// Setup branch for "master" for all older builds
-	_, err = db.Exec("INSERT INTO branches VALUES(DEFAULT, $1, $2, $3, $4);", buildTypes[0], projectID, "master", false)
+	_, err = db.Exec("INSERT INTO branches VALUES(DEFAULT, $1, $2, $3, DEFAULT, $4);", buildTypes[1], projectID, "master", false)
 	return err
 }
