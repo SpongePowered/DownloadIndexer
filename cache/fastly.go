@@ -1,7 +1,7 @@
 package cache
 
 import (
-	"github.com/SpongePowered/SpongeDownloads/maven"
+	"github.com/SpongePowered/DownloadIndexer/maven"
 	"github.com/SpongePowered/SpongeWebGo/cache"
 	"github.com/SpongePowered/SpongeWebGo/fastly"
 	"log"

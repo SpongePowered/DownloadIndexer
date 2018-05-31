@@ -1,12 +1,12 @@
-package main // import "github.com/SpongePowered/SpongeDownloads"
+package main // import "github.com/SpongePowered/DownloadIndexer"
 
 import (
 	"database/sql"
-	"github.com/SpongePowered/SpongeDownloads/auth"
-	"github.com/SpongePowered/SpongeDownloads/cache"
-	"github.com/SpongePowered/SpongeDownloads/db"
-	"github.com/SpongePowered/SpongeDownloads/downloads"
-	"github.com/SpongePowered/SpongeDownloads/httperror"
+	"github.com/SpongePowered/DownloadIndexer/auth"
+	"github.com/SpongePowered/DownloadIndexer/cache"
+	"github.com/SpongePowered/DownloadIndexer/db"
+	"github.com/SpongePowered/DownloadIndexer/downloads"
+	"github.com/SpongePowered/DownloadIndexer/httperror"
 	"github.com/SpongePowered/SpongeWebGo"
 	"gopkg.in/macaron.v1"
 	"net/http"

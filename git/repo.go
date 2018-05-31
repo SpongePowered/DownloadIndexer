@@ -4,7 +4,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"errors"
-	"github.com/SpongePowered/SpongeDownloads/downloads"
+	"github.com/SpongePowered/DownloadIndexer/downloads"
 	"gopkg.in/libgit2/git2go.v25"
 	"os"
 	"path/filepath"

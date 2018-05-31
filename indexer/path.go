@@ -2,7 +2,7 @@ package indexer
 
 import (
 	"errors"
-	"github.com/SpongePowered/SpongeDownloads/maven"
+	"github.com/SpongePowered/DownloadIndexer/maven"
 	"strings"
 )
 

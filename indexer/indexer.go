@@ -6,9 +6,9 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/SpongePowered/SpongeDownloads/db"
-	"github.com/SpongePowered/SpongeDownloads/httperror"
-	"github.com/SpongePowered/SpongeDownloads/indexer/mcmod"
+	"github.com/SpongePowered/DownloadIndexer/db"
+	"github.com/SpongePowered/DownloadIndexer/httperror"
+	"github.com/SpongePowered/DownloadIndexer/indexer/mcmod"
 	"strings"
 	"time"
 )

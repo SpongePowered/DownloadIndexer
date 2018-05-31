@@ -1,7 +1,7 @@
 package maven
 
 import (
-	"github.com/SpongePowered/SpongeDownloads/httperror"
+	"github.com/SpongePowered/DownloadIndexer/httperror"
 	"github.com/secsy/goftp"
 	"io"
 	"net/http"

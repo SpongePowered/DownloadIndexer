@@ -5,7 +5,7 @@ info:
   description: API for accessing information about Sponge downloads
   contact:
     name: Sponge
-    url: 'https://github.com/SpongePowered/SpongeDownloads/issues'
+    url: 'https://github.com/SpongePowered/DownloadIndexer/issues'
   license:
     name: MIT License
   version: 1.0.0
