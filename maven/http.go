@@ -8,31 +8,27 @@ import (
 )
 
 func createHTTP(url *url.URL) (*httpRepository, error) {
-	return &httpRepository{url}, nil
+	repo := &httpRepository{user: url.User}
+	url.User = nil
+	repo.url = url.String()
+	return repo, nil
 }
 
 type httpRepository struct {
-	url *url.URL
+	url  string
+	user *url.Userinfo
 }
 
 func (repo *httpRepository) runRequest(method string, path string, body io.Reader) (resp *http.Response, err error) {
-	// Create copy of URL
-	var u *url.URL
-	*u = *repo.url
-
-	// Remove user from URL and append extra path
-	u.User = nil
-	u.Path += path
-
-	req, err := http.NewRequest(method, u.String(), nil)
+	req, err := http.NewRequest(method, repo.url+path, nil)
 	if err != nil {
 		return
 	}
 
 	// Setup authentication
-	if repo.url.User != nil {
-		password, _ := repo.url.User.Password()
-		req.SetBasicAuth(repo.url.User.Username(), password)
+	if repo.user != nil {
+		password, _ := repo.user.Password()
+		req.SetBasicAuth(repo.user.Username(), password)
 	}
 
 	resp, err = http.DefaultClient.Do(req)
