@@ -5,22 +5,32 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 )
 
 func createHTTP(url *url.URL) (*httpRepository, error) {
 	repo := &httpRepository{user: url.User}
 	url.User = nil
 	repo.url = url.String()
+
+	durl, ok := os.LookupEnv("HTTP_DOWNLOAD_URL")
+	if ok {
+		repo.downloadURL = durl
+	} else {
+		repo.downloadURL = repo.url
+	}
+
 	return repo, nil
 }
 
 type httpRepository struct {
 	url  string
+	downloadURL string
 	user *url.Userinfo
 }
 
 func (repo *httpRepository) runRequest(method string, path string, body io.Reader) (resp *http.Response, err error) {
-	req, err := http.NewRequest(method, repo.url+path, nil)
+	req, err := http.NewRequest(method, path, nil)
 	if err != nil {
 		return
 	}
@@ -39,7 +49,7 @@ func (repo *httpRepository) runRequest(method string, path string, body io.Reade
 }
 
 func (repo *httpRepository) Download(path string, writer io.Writer) error {
-	resp, err := repo.runRequest(http.MethodGet, path, nil)
+	resp, err := repo.runRequest(http.MethodGet, repo.downloadURL + path, nil)
 	if err != nil {
 		return err
 	}
@@ -54,7 +64,7 @@ func (repo *httpRepository) Download(path string, writer io.Writer) error {
 }
 
 func (repo *httpRepository) Upload(path string, reader io.Reader) error {
-	resp, err := repo.runRequest(http.MethodPut, path, reader)
+	resp, err := repo.runRequest(http.MethodPut, repo.url + path, reader)
 	if err != nil {
 		return err
 	}
