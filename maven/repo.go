@@ -8,7 +8,7 @@ import (
 
 type Repository interface {
 	Download(path string, writer io.Writer) error
-	Upload(path string, reader io.Reader) error
+	Upload(path string, reader io.Reader, len int64) error
 }
 
 func CreateRepository(urlString string) (Repository, error) {

@@ -29,8 +29,8 @@ type httpRepository struct {
 	user *url.Userinfo
 }
 
-func (repo *httpRepository) runRequest(method string, path string, body io.Reader) (resp *http.Response, err error) {
-	req, err := http.NewRequest(method, path, nil)
+func (repo *httpRepository) prepareRequest(method string, path string, body io.Reader) (req *http.Request, err error) {
+	req, err = http.NewRequest(method, path, body)
 	if err != nil {
 		return
 	}
@@ -41,6 +41,10 @@ func (repo *httpRepository) runRequest(method string, path string, body io.Reade
 		req.SetBasicAuth(repo.user.Username(), password)
 	}
 
+	return
+}
+
+func doRequest(req *http.Request) (resp *http.Response, err error) {
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		err = httperror.New(http.StatusBadGateway, "Failed to contact upstream server", err)
@@ -49,7 +53,12 @@ func (repo *httpRepository) runRequest(method string, path string, body io.Reade
 }
 
 func (repo *httpRepository) Download(path string, writer io.Writer) error {
-	resp, err := repo.runRequest(http.MethodGet, repo.downloadURL + path, nil)
+	req, err := repo.prepareRequest(http.MethodGet, repo.downloadURL + path, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := doRequest(req)
 	if err != nil {
 		return err
 	}
@@ -63,13 +72,18 @@ func (repo *httpRepository) Download(path string, writer io.Writer) error {
 	return httperror.New(resp.StatusCode, "Failed to download file", nil)
 }
 
-func (repo *httpRepository) Upload(path string, reader io.Reader) error {
-	resp, err := repo.runRequest(http.MethodPut, repo.url + path, reader)
+func (repo *httpRepository) Upload(path string, reader io.Reader, len int64) error {
+	req, err := repo.prepareRequest(http.MethodPut, repo.url + path, reader)
 	if err != nil {
 		return err
 	}
 
-	resp.Body.Close()
+	req.ContentLength = len
+
+	resp, err := doRequest(req)
+	if err != nil {
+		return err
+	}
 
 	if resp.StatusCode == http.StatusOK {
 		return nil

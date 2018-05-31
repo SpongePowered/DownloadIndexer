@@ -77,7 +77,7 @@ func (repo *ftpRepository) Download(path string, writer io.Writer) error {
 	return httperror.New(code, "Failed to download file", err)
 }
 
-func (repo *ftpRepository) Upload(path string, reader io.Reader) error {
+func (repo *ftpRepository) Upload(path string, reader io.Reader, _ int64) error {
 	path = repo.basePath + path
 
 	repo.createPath(path)

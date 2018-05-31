@@ -46,7 +46,7 @@ func (repo *fileRepository) Download(path string, writer io.Writer) error {
 	return nil
 }
 
-func (repo *fileRepository) Upload(path string, reader io.Reader) error {
+func (repo *fileRepository) Upload(path string, reader io.Reader, _ int64) error {
 	path = repo.dir + path
 
 	err := os.MkdirAll(filepath.Dir(path), os.ModePerm)

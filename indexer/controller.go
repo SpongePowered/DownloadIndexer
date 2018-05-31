@@ -211,7 +211,7 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 
 	project := i.projects[p.Identifier]
 	if project == nil {
-		return i.repo.Upload(path, ctx.Req.Body().ReadCloser())
+		return i.repo.Upload(path, ctx.Req.Body().ReadCloser(), ctx.Req.ContentLength)
 	}
 
 	if p.snapshot && !project.useSnapshots {
@@ -359,7 +359,7 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 		}
 	}
 
-	return i.repo.Upload(path, bytes.NewReader(data))
+	return i.repo.Upload(path, bytes.NewReader(data), int64(len(data)))
 }
 
 func (i *Indexer) ErrorHandler(ctx *macaron.Context) {
