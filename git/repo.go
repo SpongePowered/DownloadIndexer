@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"github.com/SpongePowered/DownloadIndexer/downloads"
-	"gopkg.in/libgit2/git2go.v25"
+	"gopkg.in/libgit2/git2go.v26"
 	"os"
 	"path/filepath"
 	"sync"
