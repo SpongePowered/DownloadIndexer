@@ -3,8 +3,8 @@ package indexer
 import (
 	"archive/zip"
 	"bytes"
-	"github.com/SpongePowered/SpongeDownloads/indexer/jar"
-	"github.com/SpongePowered/SpongeDownloads/indexer/mcmod"
+	"github.com/SpongePowered/DownloadIndexer/indexer/jar"
+	"github.com/SpongePowered/DownloadIndexer/indexer/mcmod"
 	"time"
 )
 

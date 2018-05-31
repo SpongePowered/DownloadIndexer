@@ -2,7 +2,7 @@ package downloads
 
 import (
 	"database/sql"
-	"github.com/SpongePowered/SpongeDownloads/cache"
+	"github.com/SpongePowered/DownloadIndexer/cache"
 	"gopkg.in/macaron.v1"
 	"log"
 	"os"

@@ -2,7 +2,7 @@ package cache
 
 import (
 	"errors"
-	"github.com/SpongePowered/SpongeDownloads/maven"
+	"github.com/SpongePowered/DownloadIndexer/maven"
 	"gopkg.in/macaron.v1"
 	"log"
 	"net/http"
