@@ -24,9 +24,9 @@ func createHTTP(url *url.URL) (*httpRepository, error) {
 }
 
 type httpRepository struct {
-	url  string
+	url         string
 	downloadURL string
-	user *url.Userinfo
+	user        *url.Userinfo
 }
 
 func (repo *httpRepository) prepareRequest(method string, path string, body io.Reader) (req *http.Request, err error) {
@@ -53,7 +53,7 @@ func doRequest(req *http.Request) (resp *http.Response, err error) {
 }
 
 func (repo *httpRepository) Download(path string, writer io.Writer) error {
-	req, err := repo.prepareRequest(http.MethodGet, repo.downloadURL + path, nil)
+	req, err := repo.prepareRequest(http.MethodGet, repo.downloadURL+path, nil)
 	if err != nil {
 		return err
 	}
@@ -73,7 +73,7 @@ func (repo *httpRepository) Download(path string, writer io.Writer) error {
 }
 
 func (repo *httpRepository) Upload(path string, reader io.Reader, len int64) error {
-	req, err := repo.prepareRequest(http.MethodPut, repo.url + path, reader)
+	req, err := repo.prepareRequest(http.MethodPut, repo.url+path, reader)
 	if err != nil {
 		return err
 	}
