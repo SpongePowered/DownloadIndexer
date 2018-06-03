@@ -174,22 +174,20 @@ func (i *Indexer) Get(ctx *macaron.Context) error {
 		return httperror.New(http.StatusFailedDependency, "Previous request failed", nil)
 	}
 
-	var meta *metaState
+	if p.t == file {
+		var meta *metaState
 
-	if p.version == "" {
-		meta = &s.projectMeta
-	} else {
-		meta = &s.versionMeta
+		if p.version == "" {
+			meta = &s.projectMeta
+		} else {
+			meta = &s.versionMeta
+		}
+
+		if *meta == metaPending {
+			*meta = metaLocked
+		}
 	}
 
-	switch *meta {
-	case metaLocked:
-		return httperror.New(http.StatusLocked, "Metadata is locked", nil)
-	case metaDone:
-		return httperror.BadRequest("Metadata was already uploaded", nil)
-	}
-
-	*meta = metaLocked
 	return i.repo.Download(path, ctx.Resp)
 }
 
