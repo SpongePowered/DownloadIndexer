@@ -14,7 +14,9 @@ const (
 	sha1Extension     = ".sha1"
 
 	snapshotSuffix = "-SNAPSHOT"
+)
 
+const (
 	file fileType = iota
 	md5File
 	sha1File

@@ -28,7 +28,9 @@ const (
 	sessionCookieName   = "IndexerSession"
 	sessionSecretLength = 32
 	sessionTimeout      = 5 * time.Minute
+)
 
+const (
 	metaPending metaState = iota
 	metaLocked
 	metaDone
