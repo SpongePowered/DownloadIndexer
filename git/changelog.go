@@ -172,6 +172,8 @@ func (r *Repository) generateSubmoduleChangelog(commit *git.Commit) (map[string]
 		}
 
 		commits, err := subRepo.generateChangelog(subEntry.Id, parentSubEntry.Id)
+		subRepo.Close()
+
 		if err != nil {
 			r.Log.Println("Failed to generate submodule changelog:", err)
 			continue
