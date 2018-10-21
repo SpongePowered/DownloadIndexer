@@ -293,8 +293,15 @@ func (i *Indexer) Put(ctx *macaron.Context) error {
 					}
 				}
 
+				recommended := project.useSnapshots && !p.snapshot
+
+				// TODO: Remove this or move to some kind of project specific code
+				if project.pluginID == "spongevanilla" || project.pluginID == "spongeforge" {
+					recommended = !strings.Contains(p.version, "RC")
+				}
+
 				err = s.createDownload(i, p.displayVersion, data, buildType, branch, metadataBytes, published,
-					project.useSnapshots && !p.snapshot, requireChangelog)
+					recommended, requireChangelog)
 				if err != nil {
 					return err
 				}
