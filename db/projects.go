@@ -13,13 +13,13 @@ func setupProjects(db *sql.DB) error {
 		return err
 	}
 
-	err = setupProject(db, "SpongeVanilla", "org.spongepowered", "spongevanilla", "sponge", "SpongePowered", "SpongeVanilla",
+	err = setupProject(db, "SpongeVanilla", "org.spongepowered", "spongevanilla", "spongevanilla", "SpongePowered", "SpongeVanilla",
 		false, false, stable, bleeding)
 	if err != nil {
 		return err
 	}
 
-	err = setupProject(db, "SpongeForge", "org.spongepowered", "spongeforge", "sponge", "SpongePowered", "SpongeForge",
+	err = setupProject(db, "SpongeForge", "org.spongepowered", "spongeforge", "spongeforge", "SpongePowered", "SpongeForge",
 		false, false, stable, bleeding)
 	if err != nil {
 		return err
