@@ -12,6 +12,8 @@ const (
 	mavenMetadataFile = "maven-metadata.xml"
 	md5Extension      = ".md5"
 	sha1Extension     = ".sha1"
+	sha256Extension   = ".sha256"
+	sha512Extension   = ".sha512"
 
 	snapshotSuffix = "-SNAPSHOT"
 )
@@ -20,6 +22,8 @@ const (
 	file fileType = iota
 	md5File
 	sha1File
+	sha256File
+	sha512File
 )
 
 type path struct {
@@ -51,6 +55,14 @@ func parsePath(path string, parseArtifact bool) (p path, err error) {
 		p.t = sha1File
 		// Strip .sha1 from path for further processing
 		path = path[:len(path)-len(sha1Extension)]
+	case strings.HasSuffix(path, sha256Extension):
+		p.t = sha256File
+		// Strip .sha1 from path for further processing
+		path = path[:len(path)-len(sha256Extension)]
+	case strings.HasSuffix(path, sha512Extension):
+		p.t = sha512File
+		// Strip .sha1 from path for further processing
+		path = path[:len(path)-len(sha512Extension)]
 	default:
 		p.t = file
 	}
