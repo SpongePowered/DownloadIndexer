@@ -7,7 +7,7 @@ import (
 	"github.com/SpongePowered/DownloadIndexer/git"
 	"github.com/SpongePowered/DownloadIndexer/httperror"
 	"github.com/SpongePowered/DownloadIndexer/maven"
-	"github.com/Unknwon/com"
+	"github.com/unknwon/com"
 	"gopkg.in/macaron.v1"
 	"io"
 	"net/http"
